@@ -1,0 +1,193 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap");
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+/* Globally hide scrollbars while maintaining functionality */
+::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+* {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+}
+.scrollbar-none {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-neon-cyan: var(--neon-cyan);
+  --color-neon-violet: var(--neon-violet);
+  --color-neon-pink: var(--neon-pink);
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.875rem;
+  
+  /* Light theme by default */
+  --background: oklch(0.98 0.01 270);
+  --foreground: oklch(0.13 0.02 270);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0.02 270);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0.02 270);
+  --primary: oklch(0.6 0.25 295);
+  --primary-foreground: oklch(0.98 0.01 270);
+  --secondary: oklch(0.92 0.02 270);
+  --secondary-foreground: oklch(0.13 0.02 270);
+  --muted: oklch(0.95 0.02 270);
+  --muted-foreground: oklch(0.4 0.03 270);
+  --accent: oklch(0.7 0.2 200);
+  --accent-foreground: oklch(0.13 0.02 270);
+  --destructive: oklch(0.62 0.24 20);
+  --destructive-foreground: oklch(0.97 0.01 270);
+  --border: oklch(0.2 0.04 270 / 0.1);
+  --input: oklch(0.95 0.02 270);
+  --ring: oklch(0.6 0.25 295);
+
+  --neon-cyan: oklch(0.7 0.16 200);
+  --neon-violet: oklch(0.6 0.25 295);
+  --neon-pink: oklch(0.6 0.25 340);
+
+  --gradient-hero: linear-gradient(135deg, oklch(0.6 0.25 295) 0%, oklch(0.7 0.2 200) 100%);
+  --gradient-radial: radial-gradient(circle at 20% 0%, oklch(0.6 0.25 295 / 0.15), transparent 50%),
+                     radial-gradient(circle at 80% 50%, oklch(0.7 0.2 200 / 0.1), transparent 50%);
+  --shadow-neon: 0 10px 40px oklch(0.6 0.25 295 / 0.2);
+  --shadow-neon-cyan: 0 10px 32px oklch(0.7 0.2 200 / 0.25);
+  --glass-bg: oklch(1 0 0 / 0.6);
+  --glass-border: oklch(0 0 0 / 0.08);
+}
+
+.dark {
+  /* Dark theme override */
+  --background: oklch(0.13 0.02 270);
+  --foreground: oklch(0.97 0.01 270);
+  --card: oklch(0.18 0.025 270);
+  --card-foreground: oklch(0.97 0.01 270);
+  --popover: oklch(0.16 0.025 270);
+  --popover-foreground: oklch(0.97 0.01 270);
+  --primary: oklch(0.72 0.22 295);
+  --primary-foreground: oklch(0.13 0.02 270);
+  --secondary: oklch(0.24 0.04 270);
+  --secondary-foreground: oklch(0.97 0.01 270);
+  --muted: oklch(0.22 0.03 270);
+  --muted-foreground: oklch(0.7 0.03 270);
+  --accent: oklch(0.78 0.18 200);
+  --accent-foreground: oklch(0.13 0.02 270);
+  --destructive: oklch(0.62 0.24 20);
+  --destructive-foreground: oklch(0.97 0.01 270);
+  --border: oklch(0.3 0.04 270 / 0.4);
+  --input: oklch(0.25 0.04 270);
+  --ring: oklch(0.72 0.22 295);
+
+  --neon-cyan: oklch(0.84 0.16 200);
+  --neon-violet: oklch(0.7 0.25 295);
+  --neon-pink: oklch(0.72 0.25 340);
+
+  --gradient-hero: linear-gradient(135deg, oklch(0.7 0.25 295) 0%, oklch(0.78 0.18 200) 100%);
+  --gradient-radial: radial-gradient(circle at 20% 0%, oklch(0.7 0.25 295 / 0.35), transparent 50%),
+                     radial-gradient(circle at 80% 50%, oklch(0.78 0.18 200 / 0.25), transparent 50%);
+  --shadow-neon: 0 0 40px oklch(0.7 0.25 295 / 0.4);
+  --shadow-neon-cyan: 0 0 32px oklch(0.78 0.18 200 / 0.45);
+  --glass-bg: oklch(0.2 0.03 270 / 0.5);
+  --glass-border: oklch(0.7 0.1 270 / 0.2);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html, body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  body {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.7 0.25 295 / 0.18), transparent),
+      radial-gradient(ellipse 60% 50% at 90% 30%, oklch(0.78 0.18 200 / 0.12), transparent);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+  }
+  .gradient-text {
+    background: var(--gradient-hero);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .gradient-bg {
+    background: var(--gradient-hero);
+  }
+  .neon-glow {
+    box-shadow: var(--shadow-neon);
+  }
+  .neon-glow-cyan {
+    box-shadow: var(--shadow-neon-cyan);
+  }
+  .float-card {
+    background: rgba(15, 18, 36, 0.72);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    box-shadow: 0 32px 96px rgba(7, 13, 32, 0.18);
+  }
+  .soft-panel {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 40px rgba(10, 16, 40, 0.12);
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(oklch(0.7 0.1 270 / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(0.7 0.1 270 / 0.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
