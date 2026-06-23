@@ -32,7 +32,12 @@ function logMsg(buildId, message) {
 function runCommand(command, cwd, buildId) {
     return new Promise((resolve, reject) => {
         logMsg(buildId, `Running: ${command}`);
-        const proc = exec(command, { cwd, env: { ...process.env, PAGER: 'cat' } });
+        const customEnv = {
+            ...process.env,
+            PAGER: 'cat',
+            JAVA_HOME: 'C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.18.8-hotspot'
+        };
+        const proc = exec(command, { cwd, env: customEnv });
         
         proc.stdout.on('data', (data) => {
             const lines = data.toString().split('\n');
@@ -90,12 +95,20 @@ async function generatePwaIcons(iconUrl, appName, themeColor, buildId) {
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
         try {
-            await downloadFile(iconUrl, tempIconPath);
-            baseImage = await Jimp.read(tempIconPath);
-            logMsg(buildId, "Icon downloaded successfully.");
-            fs.unlink(tempIconPath, () => {});
+            if (iconUrl.startsWith('data:')) {
+                logMsg(buildId, "Parsing icon from base64 data URL.");
+                const base64Data = iconUrl.split(';base64,').pop();
+                const iconBuffer = Buffer.from(base64Data, 'base64');
+                baseImage = await Jimp.read(iconBuffer);
+                logMsg(buildId, "Icon loaded from base64 data URL successfully.");
+            } else {
+                await downloadFile(iconUrl, tempIconPath);
+                baseImage = await Jimp.read(tempIconPath);
+                logMsg(buildId, "Icon downloaded successfully.");
+                fs.unlink(tempIconPath, () => {});
+            }
         } catch (downloadErr) {
-            logMsg(buildId, `Failed to download icon: ${downloadErr.message}. Falling back to default generated icon.`);
+            logMsg(buildId, `Failed to download/parse icon: ${downloadErr.message}. Falling back to default generated icon.`);
         }
     }
 
@@ -577,8 +590,8 @@ async function downloadAndProcessAssets(buildId, websiteUrl, htmlContent, output
     return { processedHtml, assetsList };
 }
 
-// 5. Generate PWA Package (Asynchronous Build Task)
-async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir }) {
+// 5. Generate PWA Package (Asynchronous Build Task) - Modified to Build Android APK
+async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat }) {
     const pool = require('../db/database');
     const updateDbStatus = async (status, packageUrl = null) => {
         try {
@@ -593,11 +606,25 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         }
     };
 
+    // Store properties in buildsStore for the download route
+    if (buildsStore[buildId]) {
+        buildsStore[buildId].appName = appName;
+    }
+
     try {
         await updateDbStatus('running');
 
+        if (plan === 'free') {
+            logMsg(buildId, "→ Enqueuing in standard build pipeline (Free Plan speed limit)...");
+            logMsg(buildId, "→ Waiting in standard queue (approx 4 seconds)...");
+            await new Promise(resolve => setTimeout(resolve, 4000));
+        } else {
+            logMsg(buildId, "⚡ Priority build pipeline allocated.");
+            logMsg(buildId, "⚡ Instant compiler thread activated (Pro/Business Plan).");
+        }
+
         // --- STEP 1: VALIDATING WEBSITE ---
-        logMsg(buildId, "Step 1: Validating website accessibility & configuration...");
+        logMsg(buildId, "Step 1: Validating website accessibility & parameters...");
         buildsStore[buildId].progress = 15;
         buildsStore[buildId].step = 'Validating Website';
         
@@ -608,319 +635,140 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         await new Promise(resolve => setTimeout(resolve, 300));
 
         // --- STEP 2: CREATING WORKSPACE ---
-        logMsg(buildId, "Step 2: Preparing PWA package workspace...");
-        buildsStore[buildId].progress = 30;
+        logMsg(buildId, "Step 2: Copying pre-built Android app template to workspace...");
+        buildsStore[buildId].progress = 35;
         buildsStore[buildId].step = 'Creating Workspace';
 
         if (fs.existsSync(workspaceDir)) {
             fs.rmSync(workspaceDir, { recursive: true, force: true });
         }
-        fs.mkdirSync(workspaceDir, { recursive: true });
+        
+        // Copy the pre-initialized Android project template containing node_modules
+        const templateDir = path.resolve(__dirname, '../templates/android-project');
+        logMsg(buildId, `Copying template project files to: ${workspaceDir}...`);
+        fs.cpSync(templateDir, workspaceDir, { recursive: true });
+        
         const wwwDir = path.join(workspaceDir, 'www');
-        fs.mkdirSync(wwwDir, { recursive: true });
+        if (!fs.existsSync(wwwDir)) {
+            fs.mkdirSync(wwwDir, { recursive: true });
+        }
 
-        // --- STEP 3: DOWNLOADING ASSETS & WRAPPING IN PWA SHELL ---
-        logMsg(buildId, "Step 3: Downloading assets and preparing offline caching engine...");
-        buildsStore[buildId].progress = 50;
-        buildsStore[buildId].step = 'Downloading Assets';
+        // --- STEP 3: CONFIGURING CAPACITOR & WEB ASSETS ---
+        logMsg(buildId, "Step 3: Configuring App package details and building assets...");
+        buildsStore[buildId].progress = 60;
+        buildsStore[buildId].step = 'Configuring Assets';
 
-        let indexHtml = '';
-        let dynamicAssets = [];
-        
+        // Set up the package name
+        const cleanName = appName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'app';
+        const packageName = `com.appweaver.${cleanName}_${buildId.split('_').pop()}`;
+        logMsg(buildId, `App Package ID generated: ${packageName}`);
+
+        // Write index.html if sourceType is html, otherwise setup capacitor.config.ts URL
         if (sourceType === 'html') {
-            logMsg(buildId, "Source is custom offline HTML. Crawling tags for offline assets...");
-            const processed = await downloadAndProcessAssets(buildId, 'https://localhost', htmlContent, wwwDir);
-            indexHtml = processed.processedHtml;
-            dynamicAssets = processed.assetsList;
+            logMsg(buildId, "Packaging local custom HTML content...");
+            fs.writeFileSync(path.join(wwwDir, 'index.html'), htmlContent || '<html><body>App Weaver App</body></html>');
         } else {
-            logMsg(buildId, `Fetching website HTML from: ${websiteUrl}...`);
-            const response = await fetch(websiteUrl, { signal: AbortSignal.timeout(10000) });
-            if (!response.ok) {
-                throw new Error(`Failed to fetch website main page, status code: ${response.status}`);
-            }
-            const rawHtml = await response.text();
-            
-            logMsg(buildId, `Parsing HTML & downloading assets for offline capabilities...`);
-            const processed = await downloadAndProcessAssets(buildId, websiteUrl, rawHtml, wwwDir);
-            indexHtml = processed.processedHtml;
-            dynamicAssets = processed.assetsList;
+            logMsg(buildId, `Setting WebView source URL wrapper: ${websiteUrl}`);
+            // Place placeholder index.html so Capacitor sync works
+            fs.writeFileSync(path.join(wwwDir, 'index.html'), `<html><head><meta http-equiv="refresh" content="0;url=${websiteUrl}"></head><body>Redirecting to ${websiteUrl}</body></html>`);
         }
 
-        // Inject manifest linkage if missing
-        if (!indexHtml.includes('rel="manifest"') && !indexHtml.includes('rel=\'manifest\'')) {
-            if (indexHtml.includes('</head>')) {
-                indexHtml = indexHtml.replace('</head>', '    <link rel="manifest" href="./manifest.json">\n</head>');
-            } else {
-                indexHtml = '<link rel="manifest" href="./manifest.json">\n' + indexHtml;
-            }
-        }
-        // Inject service worker register script if missing
-        if (!indexHtml.includes('pwa-register.js')) {
-            if (indexHtml.includes('</head>')) {
-                indexHtml = indexHtml.replace('</head>', '    <script src="./pwa-register.js"></script>\n</head>');
-            } else if (indexHtml.includes('</body>')) {
-                indexHtml = indexHtml.replace('</body>', '    <script src="./pwa-register.js"></script>\n</body>');
-            } else {
-                indexHtml = indexHtml + '\n<script src="./pwa-register.js"></script>';
-            }
-        }
-
-        // Write index.html
-        fs.writeFileSync(path.join(wwwDir, 'index.html'), indexHtml);
-
-        // Write manifest
-        logMsg(buildId, "Generating W3C Web App Manifest...");
-        const manifestObj = exports.generateManifest({
-            appName,
-            shortName,
-            themeColor,
-            backgroundColor,
-            startUrl: './index.html',
-            display: 'standalone'
-        });
-        fs.writeFileSync(path.join(wwwDir, 'manifest.json'), JSON.stringify(manifestObj, null, 2));
-
-        // Write sw.js
-        logMsg(buildId, "Generating Service Worker offline engine...");
-        const swJsContent = exports.generateServiceWorker({ 
-            cacheStrategy,
-            dynamicAssets: dynamicAssets
-        });
-        fs.writeFileSync(path.join(wwwDir, 'sw.js'), swJsContent);
-
-        // Write pwa-register.js
-        const pwaRegisterScript = `// Registers the service worker for instant installation
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-            .then((reg) => {
-                console.log('App Weaver PWA Service Worker Registered. Scope: ', reg.scope);
-            })
-            .catch((err) => {
-                console.error('PWA Service Worker Registration Failed: ', err);
-            });
-    });
-}
-`;
-        fs.writeFileSync(path.join(wwwDir, 'pwa-register.js'), pwaRegisterScript);
-
-        // Write offline fallback html
-        logMsg(buildId, "Creating offline fallback page...");
-        const offlineHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Offline - ${appName}</title>
-    <style>
-        body {
-            background-color: #0f0f13;
-            color: #e2e8f0;
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .card {
-            background: #181824;
-            padding: 40px;
-            border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            text-align: center;
-            max-width: 400px;
-            border: 1px solid #2a2a3e;
-        }
-        .icon {
-            font-size: 48px;
-            margin-bottom: 20px;
-        }
-        h2 { margin-top: 0; color: #ffffff; }
-        p { color: #cbd5e1; }
-        button {
-            background-color: ${themeColor};
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 20px;
-            transition: opacity 0.2s;
-        }
-        button:hover {
-            opacity: 0.9;
-        }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="icon">📶❌</div>
-        <h2>You are currently offline</h2>
-        <p>We couldn't connect to ${appName}. Check your internet connection and try reloading.</p>
-        <button onclick="window.location.reload()">Retry Connection</button>
-    </div>
-</body>
-</html>`;
-        fs.writeFileSync(path.join(wwwDir, 'offline.html'), offlineHtml);
-
-        // Write install-guide.html
-        logMsg(buildId, "Generating inline PWA installation guides...");
-        const installGuideHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${appName} - PWA Installation Guide</title>
-    <style>
-        body {
-            background-color: #0f0f13;
-            color: #e2e8f0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 40px 20px;
-            display: flex;
-            justify-content: center;
-        }
-        .container {
-            max-width: 600px;
-            width: 100%;
-            background: #181824;
-            padding: 30px;
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            border: 1px solid #2a2a3e;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .logo {
-            width: 80px;
-            height: 80px;
-            border-radius: 20px;
-            object-fit: cover;
-            border: 2px solid ${themeColor};
-            box-shadow: 0 0 20px ${themeColor}66;
-            margin-bottom: 15px;
-        }
-        h1 {
-            margin: 0;
-            font-size: 24px;
-            color: #ffffff;
-        }
-        p.subtitle {
-            color: #94a3b8;
-            margin: 5px 0 0 0;
-            font-size: 14px;
-        }
-        .section {
-            background: #202030;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border: 1px solid #2e2e46;
-        }
-        .section-title {
-            font-weight: bold;
-            font-size: 16px;
-            margin-bottom: 12px;
-            color: ${themeColor};
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        ol {
-            margin: 0;
-            padding-left: 20px;
-        }
-        li {
-            margin-bottom: 10px;
-            font-size: 14px;
-            line-height: 1.6;
-            color: #cbd5e1;
-        }
-        .footer {
-            text-align: center;
-            font-size: 12px;
-            color: #64748b;
-            margin-top: 30px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <img class="logo" src="./icons/icon-192x192.png" onerror="this.src='https://api.dicebear.com/7.x/identicon/svg?seed=${appName}'" alt="App Icon">
-            <h1>${appName}</h1>
-            <p class="subtitle">Progressive Web App (PWA) Installation Guide</p>
-        </div>
+        // Update capacitor.config.ts
+        const capConfigPath = path.join(workspaceDir, 'capacitor.config.ts');
+        let capConfig = fs.readFileSync(capConfigPath, 'utf8');
+        capConfig = capConfig.replace(/appId:\s*['"][^'"]+['"]/g, `appId: '${packageName}'`);
+        capConfig = capConfig.replace(/appName:\s*['"][^'"]+['"]/g, `appName: '${appName}'`);
         
-        <div class="section">
-            <div class="section-title">📱 Android (Google Chrome)</div>
-            <ol>
-                <li>Open Google Chrome on your Android device.</li>
-                <li>Go to your deployed website URL.</li>
-                <li>Tap the three dots menu button in the top right corner.</li>
-                <li>Select <strong>"Install App"</strong> or <strong>"Add to Home Screen"</strong>.</li>
-                <li>Confirm the prompt by tapping <strong>"Install"</strong>.</li>
-            </ol>
-        </div>
+        if (sourceType !== 'html') {
+            capConfig = capConfig.replace(
+                /server:\s*\{[^}]*\}/g,
+                `server: {
+    androidScheme: 'https',
+    url: '${websiteUrl}',
+    cleartext: true
+  }`
+            );
+        }
+        fs.writeFileSync(capConfigPath, capConfig, 'utf8');
+        logMsg(buildId, "Capacitor config customized successfully.");
 
-        <div class="section">
-            <div class="section-title">🍎 iOS / iPhone (Safari)</div>
-            <ol>
-                <li>Open Safari on your iPhone or iPad.</li>
-                <li>Navigate to your deployed website URL.</li>
-                <li>Tap the <strong>"Share"</strong> icon (square with arrow pointing up) at the bottom toolbar.</li>
-                <li>Scroll down the options list and tap <strong>"Add to Home Screen"</strong>.</li>
-                <li>Tap <strong>"Add"</strong> in the top-right corner to complete the installation.</li>
-            </ol>
-        </div>
+        // Update strings.xml (App name on device)
+        const stringsXmlPath = path.join(workspaceDir, 'android/app/src/main/res/values/strings.xml');
+        let stringsXml = fs.readFileSync(stringsXmlPath, 'utf8');
+        stringsXml = stringsXml.replace(/<string name="app_name">[^<]+<\/string>/g, `<string name="app_name">${appName}</string>`);
+        stringsXml = stringsXml.replace(/<string name="title_activity_main">[^<]+<\/string>/g, `<string name="title_activity_main">${appName}</string>`);
+        stringsXml = stringsXml.replace(/<string name="package_name">[^<]+<\/string>/g, `<string name="package_name">${packageName}</string>`);
+        stringsXml = stringsXml.replace(/<string name="custom_url_scheme">[^<]+<\/string>/g, `<string name="custom_url_scheme">${packageName}</string>`);
+        fs.writeFileSync(stringsXmlPath, stringsXml, 'utf8');
 
-        <div class="section">
-            <div class="section-title">💻 Desktop (Chrome, Edge, Opera)</div>
-            <ol>
-                <li>Open your browser (Chrome or Edge) on your PC or Mac.</li>
-                <li>Navigate to your website URL.</li>
-                <li>Look in the address bar for the install icon (monitor with a down arrow).</li>
-                <li>Click the install icon and confirm the installation popup.</li>
-                <li>The app will launch in a clean, standalone desktop window.</li>
-            </ol>
-        </div>
+        // Update build.gradle (Gradle Package namespaces)
+        const buildGradlePath = path.join(workspaceDir, 'android/app/build.gradle');
+        let buildGradle = fs.readFileSync(buildGradlePath, 'utf8');
+        buildGradle = buildGradle.replace(/namespace\s+['"][^'"]+['"]/g, `namespace "${packageName}"`);
+        buildGradle = buildGradle.replace(/applicationId\s+['"][^'"]+['"]/g, `applicationId "${packageName}"`);
+        fs.writeFileSync(buildGradlePath, buildGradle, 'utf8');
 
-        <div class="footer">
-            Generated with App Weaver PWA Platform
-        </div>
-    </div>
-</body>
-</html>`;
-        fs.writeFileSync(path.join(wwwDir, 'install-guide.html'), installGuideHtml);
+        // Move and update MainActivity.java package name to match the new packageName/namespace
+        const oldJavaFile = path.join(workspaceDir, 'android/app/src/main/java/com/appweaver/template/MainActivity.java');
+        if (fs.existsSync(oldJavaFile)) {
+            const javaPackageDir = path.join(workspaceDir, 'android/app/src/main/java', packageName.replace(/\./g, '/'));
+            fs.mkdirSync(javaPackageDir, { recursive: true });
+            
+            const newJavaFile = path.join(javaPackageDir, 'MainActivity.java');
+            let mainActivityContent = fs.readFileSync(oldJavaFile, 'utf8');
+            mainActivityContent = mainActivityContent.replace(/package\s+com\.appweaver\.template;/g, `package ${packageName};`);
+            fs.writeFileSync(newJavaFile, mainActivityContent, 'utf8');
+            
+            if (packageName !== 'com.appweaver.template') {
+                fs.rmSync(path.join(workspaceDir, 'android/app/src/main/java/com/appweaver/template'), { recursive: true, force: true });
+            }
+            logMsg(buildId, `Relocated MainActivity.java to package directory matching: ${packageName}`);
+        } else {
+            logMsg(buildId, "[WARN] MainActivity.java template file not found in com/appweaver/template!");
+        }
 
-        // Generate icons
-        logMsg(buildId, "Generating launcher and splash icons...");
-        const iconBuffers = await generatePwaIcons(iconUrl, appName, themeColor, buildId);
-        fs.mkdirSync(path.join(wwwDir, 'icons'), { recursive: true });
-        fs.writeFileSync(path.join(wwwDir, 'icons/icon-192x192.png'), iconBuffers[192]);
-        fs.writeFileSync(path.join(wwwDir, 'icons/icon-512x512.png'), iconBuffers[512]);
+        // Generate and overwrite Android mipmap launcher icons
+        const resDir = path.join(workspaceDir, 'android/app/src/main/res');
+        await generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDir);
 
-        // --- STEP 4: PACKAGING ZIP ARCHIVE ---
-        logMsg(buildId, "Step 4: Compiling files and building deployable PWA ZIP archive...");
+        // Run Capacitor Sync
+        logMsg(buildId, "Syncing web assets into Android project shell...");
+        await runCommand('npx cap sync android', workspaceDir, buildId);
+
+        // --- STEP 4: COMPILING PACKAGE VIA GRADLE ---
+        const formatName = androidBuildFormat === 'aab' ? 'Google Play AAB Bundle' : 'Android APK';
+        logMsg(buildId, `Step 4: Launching Android build pipeline and Gradle compiler for ${formatName}...`);
         buildsStore[buildId].progress = 85;
-        buildsStore[buildId].step = 'Packaging Zip';
-        await new Promise(resolve => setTimeout(resolve, 300));
+        buildsStore[buildId].step = `Compiling ${androidBuildFormat === 'aab' ? 'AAB' : 'APK'}`;
 
+        // Write local.properties (forces pointing to local Android SDK path on user Windows PC)
+        const localPropsPath = path.join(workspaceDir, 'android/local.properties');
+        fs.writeFileSync(localPropsPath, `sdk.dir=C:\\\\Users\\\\MBiG\\\\AppData\\\\Local\\\\Android\\\\Sdk\n`, 'utf8');
+
+        // Run gradlew task inside android directory
+        const androidDir = path.join(workspaceDir, 'android');
+        const gradleTask = androidBuildFormat === 'aab' ? 'bundleDebug' : 'assembleDebug';
+        logMsg(buildId, `Starting Gradle task: gradlew ${gradleTask}...`);
+        await runCommand(`cmd.exe /c gradlew.bat ${gradleTask}`, androidDir, buildId);
+
+        // Check if output package exists
+        const compiledFileRelativePath = androidBuildFormat === 'aab'
+            ? 'android/app/build/outputs/bundle/debug/app-debug.aab'
+            : 'android/app/build/outputs/apk/debug/app-debug.apk';
+        const compiledFilePath = path.join(workspaceDir, compiledFileRelativePath);
+        if (!fs.existsSync(compiledFilePath)) {
+            throw new Error(`Gradle build process completed but output ${path.basename(compiledFilePath)} was not found!`);
+        }
+
+        // Copy built package to buildsDir
         if (!fs.existsSync(buildsDir)) {
             fs.mkdirSync(buildsDir, { recursive: true });
         }
         
-        const finalZipPath = path.join(buildsDir, 'pwa-package.zip');
-        const zip = new AdmZip();
-        zip.addLocalFolder(wwwDir);
-        zip.writeZip(finalZipPath);
-        
-        logMsg(buildId, `PWA package successfully zipped at: ${finalZipPath}`);
+        const extension = androidBuildFormat === 'aab' ? 'aab' : 'apk';
+        const finalPackagePath = path.join(buildsDir, `app-release.${extension}`);
+        fs.copyFileSync(compiledFilePath, finalPackagePath);
+        logMsg(buildId, `${formatName} successfully compiled at: ${finalPackagePath}`);
 
         // Clean up temporary workspace directory
         try {
@@ -931,17 +779,17 @@ if ('serviceWorker' in navigator) {
         }
 
         // --- COMPLETED ---
-        logMsg(buildId, "✓ Progressive Web App (PWA) package created successfully!");
+        logMsg(buildId, `✓ ${formatName} package created successfully!`);
         buildsStore[buildId].progress = 100;
         buildsStore[buildId].step = 'Completed';
         buildsStore[buildId].status = 'success';
-        buildsStore[buildId].packagePath = finalZipPath;
+        buildsStore[buildId].packagePath = finalPackagePath;
 
         const downloadUrl = `/api/pwa/download/${buildId}`;
         await updateDbStatus('success', downloadUrl);
 
     } catch (err) {
-        logMsg(buildId, `PWA PACKAGING FAILURE: ${err.message}`);
+        logMsg(buildId, `ANDROID COMPILATION FAILURE: ${err.message}`);
         buildsStore[buildId].status = 'failed';
         buildsStore[buildId].error = err.message;
         await updateDbStatus('failed');
@@ -954,11 +802,86 @@ if ('serviceWorker' in navigator) {
     }
 }
 
+// Generate Android Mipmap launcher icons in all sizes
+async function generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDir) {
+    let baseImage;
+
+    if (iconUrl) {
+        logMsg(buildId, `Downloading icon from: ${iconUrl}`);
+        const tempIconPath = path.join(__dirname, `../output/temp_icon_${buildId}.png`);
+        const outputDir = path.dirname(tempIconPath);
+        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+        try {
+            await downloadFile(iconUrl, tempIconPath);
+            baseImage = await Jimp.read(tempIconPath);
+            logMsg(buildId, "Icon downloaded successfully for Android app.");
+            fs.unlinkSync(tempIconPath);
+        } catch (downloadErr) {
+            logMsg(buildId, `Failed to download icon: ${downloadErr.message}. Falling back to default generated icon.`);
+        }
+    }
+
+    if (!baseImage) {
+        logMsg(buildId, `Generating default icon with theme color: ${themeColor || '#7c3aed'}`);
+        baseImage = new Jimp(512, 512, themeColor || '#7c3aed');
+        try {
+            baseImage.scan(0, 0, 512, 512, function(x, y, idx) {
+                const centerX = 256;
+                const centerY = 256;
+                const radius = 240;
+                const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+                if (dist > radius) {
+                    this.bitmap.data[idx + 3] = 0;
+                }
+            });
+
+            const font = await Jimp.loadFont(Jimp.FONT_SANS_128_WHITE);
+            const text = appName.substring(0, 2).toUpperCase() || 'AW';
+            const textWidth = Jimp.measureText(font, text);
+            const textHeight = Jimp.measureTextHeight(font, text, 512);
+
+            const x = (512 - textWidth) / 2;
+            const y = (512 - textHeight) / 2;
+            baseImage.print(font, x, y, text);
+        } catch (fontErr) {
+            logMsg(buildId, `Font load error: ${fontErr.message}.`);
+        }
+    }
+
+    const sizes = {
+        'mipmap-mdpi': 48,
+        'mipmap-hdpi': 72,
+        'mipmap-xhdpi': 96,
+        'mipmap-xxhdpi': 144,
+        'mipmap-xxxhdpi': 192
+    };
+
+    for (const [folder, size] of Object.entries(sizes)) {
+        const targetDir = path.join(resDir, folder);
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+        
+        // Write normal, round, and adaptive foreground icons to target resources folder
+        const resized = baseImage.clone().resize(size, size);
+        await resized.writeAsync(path.join(targetDir, 'ic_launcher.png'));
+        await resized.writeAsync(path.join(targetDir, 'ic_launcher_round.png'));
+        await resized.writeAsync(path.join(targetDir, 'ic_launcher_foreground.png'));
+    }
+    logMsg(buildId, "Android launcher icons generated in all resolutions.");
+}
+
 // Service exports
-exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy }) => {
-    const buildId = `pwa_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, plan, androidBuildFormat }) => {
+    const buildId = `apk_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const workspaceDir = path.resolve(__dirname, `../output/workspace/${buildId}`);
     const buildsDir = path.resolve(__dirname, `../builds/${buildId}`);
+
+    if (plan === 'free') {
+        appName = `${appName} (via Stufflas)`;
+        shortName = `${shortName} (via Stufflas)`;
+    }
 
     buildsStore[buildId] = {
         id: buildId,
@@ -971,9 +894,9 @@ exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, th
     };
 
     // Run packaging asynchronously
-    runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir })
+    runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat })
         .catch(err => {
-            console.error(`PWA package pipeline crash:`, err);
+            console.error(`Android app build pipeline crash:`, err);
             buildsStore[buildId].status = 'failed';
             buildsStore[buildId].error = err.message;
         });

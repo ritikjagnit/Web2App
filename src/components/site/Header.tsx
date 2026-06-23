@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/use-auth";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { backendUrl } from "@/lib/api";
+
 
 const PRESET_AVATARS = [
   // Coder Hacker Cat (white cat, green glasses, black terminal background)
@@ -46,6 +48,42 @@ export function Header() {
   const [tempName, setTempName] = useState("");
   const [tempAvatar, setTempAvatar] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
+  
+  // States for Backend Settings Modal
+  const [isBackendSettingsOpen, setIsBackendSettingsOpen] = useState(false);
+  const [customBackendUrl, setCustomBackendUrl] = useState(
+    typeof window !== 'undefined' ? (localStorage.getItem("stufflas_backend_url") || backendUrl) : "http://localhost:5000"
+  );
+  const [testingConnection, setTestingConnection] = useState(false);
+
+  const testBackendConnection = async () => {
+    setTestingConnection(true);
+    try {
+      const targetUrl = customBackendUrl.trim().replace(/\/$/, '');
+      const res = await fetch(`${targetUrl}/health`);
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`Connected! Server status: ${data.status || 'running'}`);
+      } else {
+        toast.error(`Server returned status ${res.status}`);
+      }
+    } catch (err: any) {
+      toast.error(`Connection failed: ${err.message}`);
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const saveBackendUrl = () => {
+    const formattedUrl = customBackendUrl.trim().replace(/\/$/, '');
+    localStorage.setItem("stufflas_backend_url", formattedUrl);
+    toast.success("Backend URL configured successfully! Please refresh or reload.");
+    setIsBackendSettingsOpen(false);
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+  };
+
   
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isAdmin = useIsAdmin(userId);
@@ -330,6 +368,17 @@ export function Header() {
                         Edit Profile
                       </button>
 
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          setIsBackendSettingsOpen(true);
+                        }}
+                        className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg text-white/60 hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
+                      >
+                        <Settings className="h-3.5 w-3.5" />
+                        Backend Settings
+                      </button>
+
                       <div className="h-px bg-white/5 my-1" />
 
                       <button
@@ -401,6 +450,16 @@ export function Header() {
                   className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground w-full text-left rounded-lg hover:bg-white/5 animate-none"
                 >
                   <User className="h-4 w-4" /> Edit Profile
+                </button>
+
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setIsBackendSettingsOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground w-full text-left rounded-lg hover:bg-white/5 animate-none"
+                >
+                  <Settings className="h-4 w-4" /> Backend Settings
                 </button>
 
                 <button
@@ -569,6 +628,67 @@ export function Header() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Backend Settings Modal Dialog Overlay — Rendered outside the sticky blurred header using a React Portal */}
+      {isBackendSettingsOpen && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0f1a]/95 backdrop-blur-3xl p-6 text-white shadow-2xl relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Top Close Button */}
+            <button 
+              onClick={() => setIsBackendSettingsOpen(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <h3 className="text-lg font-bold mb-3 tracking-tight">Backend Connection</h3>
+            <p className="text-xs text-white/60 mb-5 leading-relaxed">Configure the API endpoint for APK compilation.</p>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label htmlFor="backend-modal-url" className="text-[10px] font-black uppercase tracking-widest text-white/40">Server API URL</label>
+                <div className="flex gap-2">
+                  <input 
+                    id="backend-modal-url"
+                    type="text"
+                    placeholder="http://localhost:5000" 
+                    value={customBackendUrl} 
+                    onChange={(e) => setCustomBackendUrl(e.target.value)} 
+                    className="flex-1 h-10 px-3 text-xs bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-primary/50" 
+                  />
+                  <Button 
+                    variant="outline" 
+                    onClick={testBackendConnection} 
+                    disabled={testingConnection}
+                    className="h-10 rounded-xl px-3 border-white/10 hover:bg-white/5 text-xs font-bold text-white cursor-pointer"
+                  >
+                    {testingConnection ? "..." : "Test"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-2.5 pt-2">
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  className="flex-1 h-10 rounded-xl text-xs font-bold border border-white/5 text-white/60 hover:text-white hover:bg-white/5 cursor-pointer"
+                  onClick={() => setIsBackendSettingsOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={saveBackendUrl}
+                  className="flex-1 h-10 rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-white cursor-pointer shadow-lg shadow-primary/20 flex items-center justify-center"
+                >
+                  Save Connection
+                </Button>
+              </div>
+            </div>
           </div>
         </div>,
         document.body

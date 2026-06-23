@@ -120,6 +120,7 @@ export type Database = {
           id: string
           plan: string
           updated_at: string
+          api_key: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -128,6 +129,7 @@ export type Database = {
           id: string
           plan?: string
           updated_at?: string
+          api_key?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -136,8 +138,142 @@ export type Database = {
           id?: string
           plan?: string
           updated_at?: string
+          api_key?: string | null
         }
         Relationships: []
+      }
+      newsletter_subscriptions: {
+        Row: {
+          id: string
+          email: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      team_members: {
+        Row: {
+          id: string
+          owner_id: string
+          email: string
+          role: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          email: string
+          role?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          email?: string
+          role?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      play_store_submissions: {
+        Row: {
+          id: string
+          user_id: string
+          app_id: string
+          package_name: string
+          status: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          app_id: string
+          package_name: string
+          status?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          app_id?: string
+          package_name?: string
+          status?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "play_store_submissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "play_store_submissions_app_id_fkey"
+            columns: ["app_id"]
+            isOneToOne: false
+            referencedRelation: "apps"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      support_tickets: {
+        Row: {
+          id: string
+          user_id: string
+          subject: string
+          description: string
+          priority: string
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          subject: string
+          description: string
+          priority?: string
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          subject?: string
+          description?: string
+          priority?: string
+          status?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       user_roles: {
         Row: {

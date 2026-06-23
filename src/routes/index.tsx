@@ -25,10 +25,10 @@ const testimonials = [
   { name: "Priya Patel", role: "CTO, FinNest", text: "Push notifications doubled our user retention overnight.", avatar: "PP" },
 ];
 
-const plans = [
-  { name: "Free", price: "₹0", desc: "Perfect for testing", features: ["1 app", "stufflas branding", "Basic PWA pipeline", "Community support"], cta: "Start free", featured: false },
-  { name: "Pro", price: "₹299", desc: "For serious creators", features: ["Unlimited apps", "Custom branding", "Offline service worker", "QR distribution", "Priority PWA packaging"], cta: "Go Pro", featured: true },
-  { name: "Business", price: "₹599", desc: "For teams", features: ["Everything in Pro", "Team workspaces", "API access", "App Store packaging support", "Dedicated support"], cta: "Contact sales", featured: false },
+const getPlans = (billingPeriod: "monthly" | "yearly") => [
+  { name: "Free", price: "₹0", billingLabel: "/mo", desc: "Perfect for testing", features: ["1 app", "stufflas branding", "Basic PWA pipeline", "Community support"], cta: "Start free", featured: false },
+  { name: "Pro", price: billingPeriod === "monthly" ? "₹285" : "₹199", billingLabel: billingPeriod === "monthly" ? "/mo" : "/mo billed annually", desc: "For serious creators", features: ["Unlimited apps", "Custom branding", "Offline service worker", "QR distribution", "Priority PWA packaging"], cta: "Go Pro", featured: true },
+  { name: "Business", price: billingPeriod === "monthly" ? "₹570" : "₹399", billingLabel: billingPeriod === "monthly" ? "/mo" : "/mo billed annually", desc: "For teams", features: ["Everything in Pro", "Team workspaces", "API access", "App Store packaging support", "Dedicated support"], cta: "Contact sales", featured: false },
 ];
 
 function ShowcaseCard({ title, desc, type, image }: any) {
@@ -48,8 +48,8 @@ function ShowcaseCard({ title, desc, type, image }: any) {
       </div>
       <div className="p-8 border-t border-white/5">
         <span className="text-[10px] font-black uppercase tracking-widest text-primary mb-2 block">{type}</span>
-        <h4 className="text-xl font-bold text-white mb-2">{title}</h4>
-        <p className="text-xs text-white/40 leading-relaxed italic">{desc}</p>
+        <h4 className="text-xl font-bold text-foreground mb-2">{title}</h4>
+        <p className="text-xs text-muted-foreground leading-relaxed italic">{desc}</p>
       </div>
     </motion.div>
   );
@@ -75,7 +75,7 @@ function FAQItem({ question, answer }: { question: string, answer: string }) {
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
           >
-            <div className="px-8 pb-8 text-sm text-white/50 leading-relaxed italic">
+            <div className="px-8 pb-8 text-sm text-muted-foreground leading-relaxed italic">
               {answer}
             </div>
           </motion.div>
@@ -87,7 +87,10 @@ function FAQItem({ question, answer }: { question: string, answer: string }) {
 
 function HomePage() {
   const [useStateReady, setUseStateReady] = useState(false);
-  // Re-use useState for FAQ logic
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  
+  const currentPlans = getPlans(billingPeriod);
+
   return (
     <div className="min-h-screen">
       <Header />
@@ -132,12 +135,46 @@ function HomePage() {
 
       {/* PRICING */}
       <section className="py-24 mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="text-center mb-16">
+        <div className="text-center mb-10">
           <div className="text-xs uppercase tracking-widest text-accent font-semibold mb-3">Pricing</div>
           <h2 className="text-4xl sm:text-5xl font-display font-bold">Simple, honest pricing</h2>
         </div>
+
+        {/* Billing Period Toggle */}
+        <div className="flex justify-center items-center gap-4 mb-12">
+          <div className="glass p-1.5 rounded-2xl flex items-center border border-white/5">
+            <button 
+              onClick={() => setBillingPeriod("monthly")}
+              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all duration-300 ${
+                billingPeriod === "monthly" 
+                  ? "bg-primary text-primary-foreground shadow-lg" 
+                  : "text-muted-foreground hover:text-white"
+              }`}
+            >
+              Monthly
+            </button>
+            <button 
+              onClick={() => setBillingPeriod("yearly")}
+              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${
+                billingPeriod === "yearly" 
+                  ? "bg-primary text-primary-foreground shadow-lg" 
+                  : "text-muted-foreground hover:text-white"
+              }`}
+            >
+              Yearly
+              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border transition-all ${
+                billingPeriod === "yearly"
+                  ? "bg-emerald-500 text-white border-emerald-400"
+                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+              }`}>
+                Save 30%
+              </span>
+            </button>
+          </div>
+        </div>
+
         <div className="grid md:grid-cols-3 gap-6">
-          {plans.map((p, i) => (
+          {currentPlans.map((p, i) => (
             <motion.div
               key={p.name}
               initial={{ opacity: 0, y: 30 }}
@@ -153,7 +190,7 @@ function HomePage() {
               )}
               <h3 className={`text-2xl font-display font-bold ${p.featured ? "text-primary-foreground" : ""}`}>{p.name}</h3>
               <div className={`mt-4 text-5xl font-display font-bold ${p.featured ? "text-primary-foreground" : "gradient-text"}`}>
-                {p.price}<span className="text-base font-normal text-muted-foreground">/mo</span>
+                {p.price}<span className="text-base font-normal text-muted-foreground">{p.billingLabel}</span>
               </div>
               <p className={`mt-2 text-sm ${p.featured ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{p.desc}</p>
               <ul className="mt-6 space-y-3 text-sm">
@@ -213,8 +250,8 @@ function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="text-center mb-16">
             <div className="text-xs uppercase tracking-widest text-primary font-black mb-3">Gallery</div>
-            <h2 className="text-4xl sm:text-6xl font-display font-bold italic tracking-tighter text-white">Engineered for <span className="gradient-text">Excellence</span></h2>
-            <p className="text-white/40 mt-4 text-sm max-w-lg mx-auto uppercase tracking-widest font-bold">Discover high-performance apps built on our node</p>
+            <h2 className="text-4xl sm:text-6xl font-display font-bold italic tracking-tighter text-foreground">Engineered for <span className="gradient-text">Excellence</span></h2>
+            <p className="text-muted-foreground mt-4 text-sm max-w-lg mx-auto uppercase tracking-widest font-bold">Discover high-performance apps built on our node</p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -228,7 +265,7 @@ function HomePage() {
       {/* FAQ SECTION */}
       <section className="py-24 mx-auto max-w-4xl px-4 sm:px-6">
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-display font-bold italic text-white">Curious? <span className="text-primary">We have answers.</span></h2>
+          <h2 className="text-4xl font-display font-bold italic text-foreground">Curious? <span className="text-primary">We have answers.</span></h2>
         </div>
         <div className="space-y-4">
           <FAQItem question="Are the PWAs ready for App Stores?" answer="Absolutely. The generated PWA packages include standard W3C Manifests and Service Workers, making them eligible for store packaging via tools like PWABuilder. We offer assistance for Business tier users." />

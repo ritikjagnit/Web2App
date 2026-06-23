@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">App Weaver Template</string>
+    <string name="title_activity_main">App Weaver Template</string>
+    <string name="package_name">com.appweaver.template</string>
+    <string name="custom_url_scheme">com.appweaver.template</string>
+</resources>

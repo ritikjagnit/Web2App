@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { 
   Smartphone, 
@@ -13,8 +14,42 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export function Footer() {
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast.error("Please enter your email");
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("newsletter_subscriptions")
+        .insert({ email });
+        
+      if (error) {
+        if (error.message?.includes("unique") || error.code === "23505") {
+          toast.info("You are already subscribed to our newsletter!");
+        } else {
+          toast.error("Failed to subscribe: " + error.message);
+        }
+      } else {
+        toast.success("Thank you for subscribing to our newsletter!");
+        setEmail("");
+      }
+    } catch (err: any) {
+      toast.error("Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  };
   return (
     <footer className="relative border-t border-white/5 mt-24 bg-[#030303] overflow-hidden">
       {/* GLOW DECORATION */}
@@ -37,20 +72,24 @@ export function Footer() {
               Revolutionizing mobile presence. We turn any website into a high-performance installable Progressive Web App (PWA). Powered by <a href="https://mbig.in" target="_blank" className="text-white hover:text-primary transition-colors font-bold underline decoration-primary/30">MBIG.IN</a>.
             </p>
             
-            <div className="max-w-sm mb-8">
+            <form onSubmit={handleSubscribe} className="max-w-sm mb-8">
               <h5 className="text-xs font-black uppercase tracking-widest text-white/40 mb-4">Join the Ecosystem</h5>
               <div className="flex gap-2">
                 <input 
                   type="email" 
                   placeholder="Enter your email..." 
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors text-white"
+                  disabled={submitting}
+                  required
                 />
-                <Button className="rounded-xl px-6 h-12 bg-primary text-white hover:bg-primary/90 font-bold shadow-lg shadow-primary/20">
+                <Button type="submit" disabled={submitting} className="rounded-xl px-6 h-12 bg-primary text-white hover:bg-primary/90 font-bold shadow-lg shadow-primary/20">
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
               <p className="text-[10px] text-white/30 mt-2 italic">Get early access to new build nodes and enterprise features.</p>
-            </div>
+            </form>
 
             <div className="flex items-center gap-4">
               <SocialIcon href="https://github.com" icon={Github} color="hover:text-white" />

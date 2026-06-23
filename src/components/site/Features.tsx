@@ -124,7 +124,7 @@ const FeatureCard = ({ feature, index }: { feature: typeof features[0], index: n
                 </div>
 
                 <h3
-                    className="text-xl font-display font-bold mb-3 text-white group-hover:text-accent transition-colors relative z-10"
+                    className="text-xl font-display font-bold mb-3 text-foreground group-hover:text-accent transition-colors relative z-10"
                     style={{ transform: "translateZ(30px)" }}
                 >
                     {feature.title}

@@ -410,7 +410,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
                     />
                   </div>
 
-                  <span className="absolute bottom-8 text-[9px] text-white/40 uppercase font-black tracking-wider">Secured by Appify.io</span>
+                  <span className="absolute bottom-8 text-[9px] text-white/40 uppercase font-black tracking-wider">Secured by Stufflas</span>
                 </motion.div>
               )}
             </AnimatePresence>

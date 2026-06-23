@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Upload, Sparkles, Loader2, Download, Check, AlertCircle, 
@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
+import { backendUrl } from "@/lib/api";
+
 import { PhonePreview } from "@/components/site/PhonePreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +45,44 @@ type Step = "configure" | "building" | "done";
 function ConverterPage() {
   const navigate = useNavigate();
   const { url } = Route.useSearch();
+  const [userPlan, setUserPlan] = useState<string>("free");
+  const [appCount, setAppCount] = useState<number>(0);
+  const [checkingLimits, setCheckingLimits] = useState<boolean>(true);
+
+  useEffect(() => {
+    const checkLimits = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          setCheckingLimits(false);
+          return;
+        }
+        
+        const userId = sessionData.session.user.id;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("plan")
+          .eq("id", userId)
+          .maybeSingle();
+          
+        const plan = profile?.plan || "free";
+        setUserPlan(plan);
+        
+        const { count } = await supabase
+          .from("apps")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId);
+          
+        setAppCount(count || 0);
+      } catch (err) {
+        console.error("Error checking limits:", err);
+      } finally {
+        setCheckingLimits(false);
+      }
+    };
+    
+    checkLimits();
+  }, []);
   const [websiteUrl, setWebsiteUrl] = useState(url || "https://en.wikipedia.org/wiki/Mobile_app");
   const [appName, setAppName] = useState("My Awesome App");
   const [shortName, setShortName] = useState("Awesome PWA");
@@ -60,6 +100,7 @@ function ConverterPage() {
   const [iconPreview, setIconPreview] = useState<string>("");
   const [navStyle, setNavStyle] = useState<"top" | "bottom">("bottom");
   const [enableOptimization, setEnableOptimization] = useState(true);
+  const [androidBuildFormat, setAndroidBuildFormat] = useState<"apk" | "aab">("apk");
 
   const [step, setStep] = useState<Step>("configure");
   const [progress, setProgress] = useState(0);
@@ -108,7 +149,7 @@ function ConverterPage() {
   const generateAIIcon = async () => {
     setIsGeneratingIcon(true);
     await new Promise(r => setTimeout(r, 2000));
-    const mockIcon = `https://api.dicebear.com/7.x/identicon/svg?seed=${appName}`;
+    const mockIcon = `https://api.dicebear.com/7.x/identicon/png?seed=${appName}`;
     setIconPreview(mockIcon);
     setIsGeneratingIcon(false);
     toast.success("AI Generated a unique brand icon!");
@@ -132,7 +173,6 @@ function ConverterPage() {
     setComplianceReport([]);
     
     try {
-      const backendUrl = "http://localhost:5000";
       const res = await fetch(`${backendUrl}/api/pwa/validate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -220,6 +260,27 @@ function ConverterPage() {
     }
     const userId = sessionData.session.user.id;
 
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("plan")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const currentPlan = profile?.plan || "free";
+    if (currentPlan === "free") {
+      const { count } = await supabase
+        .from("apps")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId);
+        
+      if (count && count >= 1) {
+        toast.error("Free Plan limit exceeded: Maximum 1 app allowed on the free plan.");
+        setStep("configure");
+        navigate({ to: "/pricing" });
+        return;
+      }
+    }
+
     setStep("building");
     setProgress(0);
     setLogs([]);
@@ -234,6 +295,8 @@ function ConverterPage() {
         const { error } = await supabase.storage.from("app-assets").upload(path, iconFile);
         if (error) throw error;
         iconUrl = supabase.storage.from("app-assets").getPublicUrl(path).data.publicUrl;
+      } else if (iconPreview && iconPreview.startsWith("http")) {
+        iconUrl = iconPreview;
       }
       if (splashFile) {
         const path = `${userId}/splash/${Date.now()}-${splashFile.name}`;
@@ -267,7 +330,7 @@ function ConverterPage() {
         website_url: sourceType === "url" ? websiteUrl : "local-html-source",
         html_file_url: htmlFileUrl,
         target_platform: "pwa",
-        android_build_format: "zip",
+        android_build_format: androidBuildFormat,
         package_name: packageName,
         theme_color: themeColor,
         icon_url: iconUrl,
@@ -309,8 +372,6 @@ function ConverterPage() {
       if (buildErr) throw buildErr;
 
       // Call our backend build pipeline
-      const backendUrl = "http://localhost:5000";
-      
       const buildRes = await fetch(`${backendUrl}/api/pwa/build`, {
         method: "POST",
         headers: {
@@ -326,7 +387,9 @@ function ConverterPage() {
           sourceType: sourceType,
           htmlContent: htmlContent,
           iconUrl: iconUrl,
-          cacheStrategy: cacheStrategy
+          cacheStrategy: cacheStrategy,
+          plan: userPlan,
+          android_build_format: androidBuildFormat
         })
       });
 
@@ -383,7 +446,7 @@ function ConverterPage() {
       // Update status and url in database
       await supabase.from("apps").update({ status: "ready", apk_url: finalZipUrl }).eq("id", app.id);
 
-      const completionLog = `✓ Progressive Web App package created successfully!`;
+      const completionLog = `✓ Android ${androidBuildFormat.toUpperCase()} package compiled successfully!`;
       await supabase.from("builds").update({
         status: "success",
         progress: 100,
@@ -392,11 +455,11 @@ function ConverterPage() {
         log: completionLog,
       }).eq("id", build.id);
 
-      setLogs((prev) => [...prev, completionLog, `→ Download package: ${finalZipUrl}`]);
+      setLogs((prev) => [...prev, completionLog, `→ Download ${androidBuildFormat.toUpperCase()}: ${finalZipUrl}`]);
       setAppId(app.id);
       setDownloadUrl(finalZipUrl);
       setStep("done");
-      toast.success("PWA package generated!");
+      toast.success(`Android ${androidBuildFormat.toUpperCase()} generated successfully!`);
     } catch (err: any) {
       toast.error(err.message ?? "PWA Generation failed");
       setStep("configure");
@@ -532,7 +595,7 @@ function ConverterPage() {
                               {rep.passed ? <Check className="h-4.5 w-4.5 text-emerald-500 shrink-0" /> : <AlertCircle className="h-4.5 w-4.5 text-yellow-500 shrink-0" />}
                             </span>
                             <div>
-                              <div className="font-bold text-white/95">{rep.name}</div>
+                              <div className="font-bold text-foreground">{rep.name}</div>
                               <div className="text-[10px] text-muted-foreground leading-normal">{rep.desc}</div>
                             </div>
                           </div>
@@ -625,19 +688,33 @@ function ConverterPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Navigation Preview style</Label>
-                    <div className="flex gap-3">
-                      {["top", "bottom"].map((s) => (
-                        <button 
-                          key={s} 
-                          type="button" 
-                          onClick={() => setNavStyle(s as any)} 
-                          className={`flex-1 flex items-center justify-center gap-2 h-10 rounded-lg border ${navStyle === s ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-xs font-medium capitalize`}
-                        >
-                          {s} Navbar
-                        </button>
-                      ))}
+                   <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="buildFormat">Android Build Format</Label>
+                      <select 
+                        id="buildFormat" 
+                        value={androidBuildFormat} 
+                        onChange={(e) => setAndroidBuildFormat(e.target.value as "apk" | "aab")} 
+                        className="flex h-10 w-full rounded-md border border-input bg-black/40 px-3 py-2 text-xs text-white/90 ring-offset-background focus-visible:outline-none"
+                      >
+                        <option value="apk" className="bg-zinc-900">APK (For Device Testing)</option>
+                        <option value="aab" className="bg-zinc-900">AAB (Google Play Store)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Navigation Preview Style</Label>
+                      <div className="flex gap-3">
+                        {["top", "bottom"].map((s) => (
+                          <button 
+                            key={s} 
+                            type="button" 
+                            onClick={() => setNavStyle(s as any)} 
+                            className={`flex-1 flex items-center justify-center gap-2 h-10 rounded-lg border ${navStyle === s ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-xs font-medium capitalize`}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -711,7 +788,26 @@ function ConverterPage() {
                     </div>
                   </div>
 
-                  <Button variant="hero" size="xl" className="w-full" onClick={startBuild}>
+                  {userPlan === "free" && appCount >= 1 && (
+                    <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-4 flex gap-3 text-left mb-4">
+                      <AlertCircle className="h-5.5 w-5.5 text-destructive shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-bold text-sm text-destructive">Plan Limit Exceeded</h4>
+                        <p className="text-xs text-muted-foreground mt-1">You are currently on the <b>Free Plan</b>, which allows a maximum of 1 app. You have already created 1 app. Please upgrade to Pro or Business to generate more apps.</p>
+                        <Button variant="outline" size="sm" className="mt-3 text-xs h-8 rounded-lg" asChild>
+                          <Link to="/pricing">View Pricing Plans</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button 
+                    variant={userPlan === "free" && appCount >= 1 ? "secondary" : "hero"} 
+                    size="xl" 
+                    className="w-full" 
+                    onClick={startBuild}
+                    disabled={userPlan === "free" && appCount >= 1}
+                  >
                     <Sparkles className="h-5 w-5" /> Generate PWA Package
                   </Button>
                 </motion.div>
@@ -742,20 +838,20 @@ function ConverterPage() {
                     <div className="mx-auto h-16 w-16 rounded-full gradient-bg flex items-center justify-center neon-glow">
                       <Check className="h-8 w-8 text-primary-foreground" />
                     </div>
-                    <h3 className="text-2xl font-display font-bold">PWA Package Ready!</h3>
-                    <p className="text-sm text-muted-foreground max-w-sm mx-auto">Your website has been compiled into an installable Progressive Web App (PWA) package.</p>
+                    <h3 className="text-2xl font-display font-bold">Android {androidBuildFormat.toUpperCase()} Ready!</h3>
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto">Your website has been compiled into an installable Android App ({androidBuildFormat.toUpperCase()}).</p>
                   </div>
 
                   {/* Checklist of generated assets */}
-                  <div className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 space-y-2.5 text-xs text-left">
-                    <div className="font-bold border-b border-white/5 pb-2 text-white/95">PWA Package Elements Compiled:</div>
+                  <div className="bg-muted/10 border border-border rounded-2xl p-4 space-y-2.5 text-xs text-left">
+                    <div className="font-bold border-b border-border pb-2 text-foreground">PWA Package Elements Compiled:</div>
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> W3C Web App Manifest</div>
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> High-Resolution Brand Icons</div>
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Service Worker Offline Engine</div>
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Offline HTML Fallback Page</div>
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Install-Ready Registration Guide</div>
-                      <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Deploy-Ready PWA ZIP Package</div>
+                      <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Install-Ready Android {androidBuildFormat.toUpperCase()}</div>
                     </div>
                   </div>
 
@@ -767,8 +863,8 @@ function ConverterPage() {
                       <TabsTrigger value="desktop" className="rounded-lg text-xs">Desktop</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="install" className="mt-3 text-left space-y-2 text-xs text-muted-foreground p-2 border border-white/5 bg-white/[0.01] rounded-xl">
-                      <div className="font-bold text-white/95 flex items-center gap-1.5"><Smartphone className="h-4 w-4 text-primary" /> Install on Android:</div>
+                    <TabsContent value="install" className="mt-3 text-left space-y-2 text-xs text-muted-foreground p-2 border border-border bg-muted/10 rounded-xl">
+                      <div className="font-bold text-foreground flex items-center gap-1.5"><Smartphone className="h-4 w-4 text-primary" /> Install on Android:</div>
                       <ol className="list-decimal pl-4 space-y-1">
                         <li>Open Google Chrome on your Android device.</li>
                         <li>Navigate to your deployed website URL.</li>
@@ -778,8 +874,8 @@ function ConverterPage() {
                       </ol>
                     </TabsContent>
 
-                    <TabsContent value="ios" className="mt-3 text-left space-y-2 text-xs text-muted-foreground p-2 border border-white/5 bg-white/[0.01] rounded-xl">
-                      <div className="font-bold text-white/95 flex items-center gap-1.5"><Smartphone className="h-4 w-4 text-primary" /> Install on iOS (iPhone/iPad):</div>
+                    <TabsContent value="ios" className="mt-3 text-left space-y-2 text-xs text-muted-foreground p-2 border border-border bg-muted/10 rounded-xl">
+                      <div className="font-bold text-foreground flex items-center gap-1.5"><Smartphone className="h-4 w-4 text-primary" /> Install on iOS (iPhone/iPad):</div>
                       <ol className="list-decimal pl-4 space-y-1">
                         <li>Open Safari browser on your iPhone or iPad.</li>
                         <li>Navigate to your deployed website URL.</li>
@@ -789,8 +885,8 @@ function ConverterPage() {
                       </ol>
                     </TabsContent>
 
-                    <TabsContent value="desktop" className="mt-3 text-left space-y-2 text-xs text-muted-foreground p-2 border border-white/5 bg-white/[0.01] rounded-xl">
-                      <div className="font-bold text-white/95 flex items-center gap-1.5"><Laptop className="h-4 w-4 text-primary" /> Install on Desktop (Chrome/Edge):</div>
+                    <TabsContent value="desktop" className="mt-3 text-left space-y-2 text-xs text-muted-foreground p-2 border border-border bg-muted/10 rounded-xl">
+                      <div className="font-bold text-foreground flex items-center gap-1.5"><Laptop className="h-4 w-4 text-primary" /> Install on Desktop (Chrome/Edge):</div>
                       <ol className="list-decimal pl-4 space-y-1">
                         <li>Open your website URL in Google Chrome or Microsoft Edge.</li>
                         <li>Look at the address bar and click the "Install App" icon (looks like a monitor with a down arrow).</li>
@@ -802,7 +898,7 @@ function ConverterPage() {
 
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <Button variant="hero" className="flex-1 gap-2" asChild>
-                      <a href={downloadUrl} download><Download className="h-4 w-4" /> Download PWA Package</a>
+                      <a href={downloadUrl} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.${androidBuildFormat}`}><Download className="h-4 w-4" /> Download Android {androidBuildFormat.toUpperCase()}</a>
                     </Button>
                     <Button variant="glass" className="flex-1" onClick={() => setStep("configure")}>Configure Another</Button>
                   </div>
