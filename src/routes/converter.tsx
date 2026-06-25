@@ -67,7 +67,7 @@ function ConverterPage() {
         const plan = profile?.plan || "free";
         setUserPlan(plan);
         
-        const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || "http://localhost:5001";
+        const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com");
         try {
           const limitRes = await fetch(`${backendUrl}/api/pwa/check-limits/${userId}`);
           if (limitRes.ok) {
@@ -190,7 +190,7 @@ function ConverterPage() {
     try {
       let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
       if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
-        backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : 'https://apporbit-backend.onrender.com';
+        backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : 'https://web2app-689l.onrender.com';
       }
       const res = await fetch(`${backendUrl}/api/pwa/validate`, {
         method: "POST",
@@ -289,7 +289,7 @@ function ConverterPage() {
     if (currentPlan === "free") {
       let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
       if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
-        backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : 'https://apporbit-backend.onrender.com';
+        backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : 'https://web2app-689l.onrender.com';
       }
       let count = 0;
       try {
@@ -413,7 +413,7 @@ function ConverterPage() {
       // Call our backend build pipeline
       let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
       if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
-        backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : 'https://apporbit-backend.onrender.com';
+        backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : 'https://web2app-689l.onrender.com';
       }
       
       let buildRes;

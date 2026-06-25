@@ -83,7 +83,7 @@ const MOCK_CHART_DATA = [
   { name: "Sun", builds: 10 },
 ];
 
-const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || "http://localhost:5001";
+const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com");
 
 function DashboardPage() {
   const session = useAuthGuard();
