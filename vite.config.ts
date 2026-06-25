@@ -8,6 +8,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  nitro: true,
   vite: {
     plugins: [
       VitePWA({
@@ -42,6 +43,9 @@ export default defineConfig({
       headers: {
         "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
       },
+      watch: {
+        ignored: ['**/backend/**']
+      }
     },
   },
 });

@@ -8,7 +8,8 @@ import { Link, Palette, Zap, ChevronRight } from "lucide-react";
 export const Route = createFileRoute("/features")({
   head: () => ({
     meta: [
-      { title: "Features — stufflas" },
+      { title: "Features — AppOrbit" },
+      { name: "keywords", content: "web to apk, web to app, website to android app, apk builder, pwa to apk" },
       { name: "description", content: "Explore the futuristic capabilities of our web-to-app conversion engine." },
     ],
   }),
@@ -28,7 +29,7 @@ function FeaturesPage() {
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-5xl md:text-8xl font-display font-bold mb-6 tracking-tight"
+            className="text-3xl sm:text-6xl md:text-8xl font-display font-bold mb-6 tracking-tight"
           >
             Capabilities of <br />
             <span className="gradient-text">Tomorrow</span>
@@ -53,7 +54,7 @@ function FeaturesPage() {
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
-              className="text-4xl font-display font-bold mb-4"
+              className="text-2xl sm:text-4xl font-display font-bold mb-4"
             >
               Build your app in <span className="gradient-text">3 simple steps</span>
             </motion.h2>
@@ -80,7 +81,7 @@ function FeaturesPage() {
               { 
                 step: "03", 
                 title: "Finalize & Deploy", 
-                desc: "Hit generate. Our PWA engine processes settings, compiles caching engines, structures manifests, and bundles a deploy-ready package in seconds.",
+                desc: "Hit generate. Our APK engine processes settings, compiles caching engines, structures manifests, and bundles a deploy-ready package in seconds.",
                 icon: <Zap className="h-6 w-6 text-emerald-400" />
               }
             ].map((s, i) => (
@@ -91,12 +92,12 @@ function FeaturesPage() {
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.2 }}
                 whileHover={{ y: -10 }}
-                className="glass rounded-[2rem] p-8 border-white/10 relative group"
+                className="glass rounded-[2rem] p-4 sm:p-8 border-border/40 relative group"
               >
-                <div className="absolute -top-4 -left-4 w-12 h-12 rounded-2xl bg-black border border-white/10 flex items-center justify-center font-display font-bold text-lg text-primary shadow-xl">
+                <div className="absolute -top-4 left-4 sm:-left-4 w-12 h-12 rounded-2xl bg-background border border-border/40 flex items-center justify-center font-display font-bold text-lg text-primary shadow-xl">
                   {s.step}
                 </div>
-                <div className="h-14 w-14 rounded-2xl bg-white/5 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <div className="h-14 w-14 rounded-2xl bg-secondary flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                   {s.icon}
                 </div>
                 <h3 className="text-xl font-bold mb-4">{s.title}</h3>
@@ -121,7 +122,7 @@ function FeaturesPage() {
               initial={{ opacity: 0, x: -30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              className="glass rounded-3xl p-10 border-white/10 relative overflow-hidden group"
+              className="glass rounded-3xl p-4 sm:p-10 border-border/40 relative overflow-hidden group"
             >
               <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
                 <div className="w-40 h-40 border-4 border-accent rounded-full animate-ping"></div>
@@ -132,7 +133,7 @@ function FeaturesPage() {
                 With zero-latency message passing, your web app gains full access to device features like haptics and file systems.
               </p>
               <div className="flex gap-4">
-                <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                   <motion.div 
                     initial={{ width: 0 }}
                     whileInView={{ width: "99.9%" }}
@@ -148,7 +149,7 @@ function FeaturesPage() {
               initial={{ opacity: 0, x: 30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              className="glass rounded-3xl p-10 border-white/10 relative overflow-hidden group"
+              className="glass rounded-3xl p-4 sm:p-10 border-border/40 relative overflow-hidden group"
             >
               <h3 className="text-3xl font-display font-bold mb-6">Enterprise Security</h3>
               <p className="text-muted-foreground leading-relaxed mb-8">
@@ -158,7 +159,7 @@ function FeaturesPage() {
               </p>
               <div className="flex flex-wrap gap-3">
                 {['Capacitor 6+', 'SSL Pinning', 'JWT Auth', 'Biometric Lock'].map((tag) => (
-                  <span key={tag} className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-muted-foreground">
+                  <span key={tag} className="px-3 py-1 rounded-full bg-secondary border border-border/40 text-xs font-mono text-muted-foreground">
                     {tag}
                   </span>
                 ))}

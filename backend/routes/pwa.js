@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pwaService = require('../services/pwaService');
+const pool = require('../db/database');
 
 // POST /api/pwa/validate
 router.post('/validate', async (req, res) => {
@@ -59,6 +60,27 @@ router.post('/readiness', async (req, res) => {
     }
 });
 
+// GET /api/pwa/check-limits/:userId
+router.get('/check-limits/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const profileResult = await pool.query('SELECT plan FROM profiles WHERE id = $1', [userId]);
+        const plan = profileResult.rows[0]?.plan || 'free';
+
+        const buildsResult = await pool.query('SELECT COUNT(*) as count FROM app_builds WHERE user_id = $1', [userId]);
+        const count = parseInt(buildsResult.rows[0]?.count || '0');
+
+        res.json({
+            plan,
+            count,
+            allowed: plan !== 'free' || count < 1
+        });
+    } catch (err) {
+        console.error('Error checking limits:', err);
+        res.status(500).json({ error: 'Failed to check limits', details: err.message });
+    }
+});
+
 // POST /api/pwa/build (Generate PWA Package)
 router.post('/build', async (req, res) => {
     const { 
@@ -71,11 +93,26 @@ router.post('/build', async (req, res) => {
         sourceType, 
         htmlContent, 
         iconUrl,
-        cacheStrategy
+        cacheStrategy,
+        plan,
+        android_build_format
     } = req.body;
     
     if (sourceType !== 'html' && !website_url) {
         return res.status(400).json({ error: 'website_url is required when sourceType is not html' });
+    }
+
+    const activePlan = plan || 'free';
+    if (activePlan === 'free' && user_id) {
+        try {
+            const buildsResult = await pool.query('SELECT COUNT(*) as count FROM app_builds WHERE user_id = $1', [user_id]);
+            const count = parseInt(buildsResult.rows[0]?.count || '0');
+            if (count >= 1) {
+                return res.status(403).json({ error: 'Free Plan limit exceeded: Maximum 1 app allowed on the free plan.' });
+            }
+        } catch (dbErr) {
+            console.error('Error checking limits on build:', dbErr);
+        }
     }
 
     try {
@@ -89,7 +126,9 @@ router.post('/build', async (req, res) => {
             sourceType: sourceType || 'url',
             htmlContent: htmlContent,
             iconUrl: iconUrl,
-            cacheStrategy: cacheStrategy || 'StaleWhileRevalidate'
+            cacheStrategy: cacheStrategy || 'StaleWhileRevalidate',
+            plan: plan || 'free',
+            androidBuildFormat: android_build_format || 'apk'
         });
 
         res.json({ 
@@ -102,6 +141,70 @@ router.post('/build', async (req, res) => {
     } catch (err) {
         console.error('Failed to start PWA generation:', err);
         res.status(500).json({ error: 'Failed to start build', details: err.message });
+    }
+});
+
+const path = require('path');
+
+// POST /api/pwa/api-build
+router.post('/api-build', async (req, res) => {
+    const apiKeyHeader = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+    if (!apiKeyHeader) {
+        return res.status(401).json({ error: 'Unauthorized: X-API-Key header is missing' });
+    }
+
+    try {
+        const result = await pool.query('SELECT id, plan FROM profiles WHERE api_key = $1', [apiKeyHeader]);
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Unauthorized: Invalid API Key' });
+        }
+
+        const profile = result.rows[0];
+        if (profile.plan !== 'business') {
+            return res.status(403).json({ error: 'Forbidden: API Access is exclusive to the Business Plan' });
+        }
+
+        const {
+            website_url,
+            app_name,
+            short_name,
+            theme_color,
+            background_color,
+            iconUrl,
+            cacheStrategy,
+            android_build_format
+        } = req.body;
+
+        if (!website_url && req.body.sourceType !== 'html') {
+            return res.status(400).json({ error: 'website_url is required' });
+        }
+
+        const buildId = await pwaService.generatePwaPackage({
+            userId: profile.id,
+            websiteUrl: website_url,
+            appName: app_name || 'API compiled PWA',
+            shortName: short_name || app_name || 'API PWA',
+            themeColor: theme_color || '#7c3aed',
+            backgroundColor: background_color || '#ffffff',
+            sourceType: req.body.sourceType || 'url',
+            htmlContent: req.body.htmlContent || null,
+            iconUrl: iconUrl,
+            cacheStrategy: cacheStrategy || 'StaleWhileRevalidate',
+            plan: 'business',
+            androidBuildFormat: android_build_format || 'apk'
+        });
+
+        res.json({
+            success: true,
+            message: 'API compilation started successfully in priority queue',
+            buildId: buildId,
+            statusUrl: `/api/pwa/build/status/${buildId}`,
+            logsUrl: `/api/pwa/build/logs/${buildId}`
+        });
+
+    } catch (err) {
+        console.error('API PWA Build error:', err);
+        res.status(500).json({ error: 'Failed to start programmatic build', details: err.message });
     }
 });
 
@@ -155,11 +258,29 @@ router.get('/build/logs/:buildId', (req, res) => {
 
 // GET /api/pwa/download/:buildId
 router.get('/download/:buildId', (req, res) => {
-    const build = pwaService.getBuildStatus(req.params.buildId);
-    if (!build || build.status !== 'success' || !build.packagePath) {
-        return res.status(404).json({ error: 'PWA ZIP package is not ready or generation failed' });
+    const buildId = req.params.buildId;
+    const fs = require('fs');
+    const path = require('path');
+    
+    let packagePath = path.resolve(__dirname, `../../builds/${buildId}/app-release.apk`);
+    let extension = '.apk';
+    
+    if (!fs.existsSync(packagePath)) {
+        packagePath = path.resolve(__dirname, `../../builds/${buildId}/app-release.aab`);
+        extension = '.aab';
     }
-    res.download(build.packagePath, 'pwa-package.zip');
+    
+    if (!fs.existsSync(packagePath)) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        return res.status(404).json({ error: 'Android package is not ready or compilation failed' });
+    }
+    
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const build = pwaService.getBuildStatus(buildId);
+    const cleanName = (build && build.appName ? build.appName : 'app').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    res.download(packagePath, `${cleanName}${extension}`);
 });
 
 module.exports = router;

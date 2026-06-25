@@ -23,7 +23,7 @@ const features = [
     },
     {
         title: "Web Push Notifications",
-        desc: "Send standard Web Push notifications to keep users engaged even when the PWA is closed.",
+        desc: "Send standard Web Push notifications to keep users engaged even when the APK is closed.",
         icon: Bell,
         color: "var(--neon-violet)",
         gradient: "from-purple-400 to-indigo-500",
@@ -58,7 +58,7 @@ const features = [
     },
     {
         title: "Instant Bundler",
-        desc: "Generate a deploy-ready PWA package ZIP containing manifest, sw, index, and resized icons in seconds.",
+        desc: "Generate a deploy-ready APK package ZIP containing manifest, sw, index, and resized icons in seconds.",
         icon: Cloud,
         color: "var(--neon-violet)",
         gradient: "from-violet-400 to-fuchsia-500",
@@ -112,7 +112,7 @@ const FeatureCard = ({ feature, index }: { feature: typeof features[0], index: n
             <div className="absolute -inset-0.5 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition duration-500 blur-xl group-hover:duration-200"
                 style={{ backgroundImage: `linear-gradient(to right, ${feature.color}, transparent)` }}></div>
 
-            <div className="relative glass rounded-2xl p-8 h-full flex flex-col border border-white/10 overflow-hidden">
+            <div className="relative glass rounded-2xl p-6 sm:p-8 h-full flex flex-col border border-border/40 overflow-hidden">
                 {/* Animated Background Mesh */}
                 <div className="absolute top-0 right-0 -mr-16 -mt-16 w-32 h-32 bg-primary/10 rounded-full blur-3xl transition-transform group-hover:scale-150 duration-700"></div>
 
@@ -124,7 +124,7 @@ const FeatureCard = ({ feature, index }: { feature: typeof features[0], index: n
                 </div>
 
                 <h3
-                    className="text-xl font-display font-bold mb-3 text-white group-hover:text-accent transition-colors relative z-10"
+                    className="text-xl font-display font-bold mb-3 text-foreground group-hover:text-accent transition-colors relative z-10"
                     style={{ transform: "translateZ(30px)" }}
                 >
                     {feature.title}
@@ -157,7 +157,7 @@ export const Features = () => {
                         initial={{ opacity: 0, scale: 0.9 }}
                         whileInView={{ opacity: 1, scale: 1 }}
                         viewport={{ once: true }}
-                        className="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-xs mb-6 border-white/20"
+                        className="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-xs mb-6 border-border/40"
                     >
                         <span className="h-2 w-2 rounded-full bg-accent neon-glow-cyan animate-pulse" />
                         <span className="text-accent font-semibold tracking-wider uppercase">Native Capabilities</span>
@@ -167,7 +167,7 @@ export const Features = () => {
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        className="text-5xl md:text-7xl font-display font-bold mb-8"
+                        className="text-3xl sm:text-5xl md:text-7xl font-display font-bold mb-8"
                     >
                         Pure Native,<br />
                         <span className="gradient-text">Zero Compromise</span>
@@ -180,7 +180,7 @@ export const Features = () => {
                         transition={{ delay: 0.1 }}
                         className="mt-4 text-muted-foreground text-lg max-w-3xl mx-auto leading-relaxed"
                     >
-                        Transform your web experience into a high-performance, installable mobile PWA. 
+                        Transform your web experience into a high-performance, installable mobile APK. 
                         Our engine generates standards-compliant offline caching and manifests in seconds.
                     </motion.p>
                 </div>

@@ -1,0 +1,22 @@
+# AppOrbit - Web To APK Builder
+
+AppOrbit is a powerful platform that allows users to turn any website into a beautiful, installable Android App (APK/AAB) in minutes without any coding required.
+
+## Key Features
+- **Web to APK/AAB Converter**: Instantly convert any URL to a fully functional Android app.
+- **No Coding Required**: Simple interface to configure and build your app.
+- **Push Notifications**: Engage users with built-in push notification support.
+- **Offline Support**: Keep your app functional even without an internet connection.
+- **Custom Branding**: Fully customize your app's name, icon, and splash screen.
+
+## Important Links
+- **Home**: [https://apporbit.in/](https://apporbit.in/)
+- **Converter**: [https://apporbit.in/converter](https://apporbit.in/converter)
+- **Pricing**: [https://apporbit.in/pricing](https://apporbit.in/pricing)
+- **Features**: [https://apporbit.in/features](https://apporbit.in/features)
+- **Privacy Policy**: [https://apporbit.in/privacy](https://apporbit.in/privacy)
+- **Terms of Service**: [https://apporbit.in/terms](https://apporbit.in/terms)
+- **Help Center**: [https://apporbit.in/help](https://apporbit.in/help)
+
+## Technical Details
+This platform is built using modern web technologies including React, Vite, TanStack Router, and Tailwind CSS.

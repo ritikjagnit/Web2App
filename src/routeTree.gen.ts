@@ -9,8 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SuperAdminRouteImport } from './routes/super-admin'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as HelpRouteImport } from './routes/help'
 import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConverterRouteImport } from './routes/converter'
@@ -18,14 +21,29 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuperAdminRoute = SuperAdminRouteImport.update({
   id: '/super-admin',
   path: '/super-admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PricingRoute = PricingRouteImport.update({
   id: '/pricing',
   path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FeaturesRoute = FeaturesRouteImport.update({
@@ -66,8 +84,11 @@ export interface FileRoutesByFullPath {
   '/converter': typeof ConverterRoute
   '/dashboard': typeof DashboardRoute
   '/features': typeof FeaturesRoute
+  '/help': typeof HelpRoute
   '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
   '/super-admin': typeof SuperAdminRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -76,8 +97,11 @@ export interface FileRoutesByTo {
   '/converter': typeof ConverterRoute
   '/dashboard': typeof DashboardRoute
   '/features': typeof FeaturesRoute
+  '/help': typeof HelpRoute
   '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
   '/super-admin': typeof SuperAdminRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -87,8 +111,11 @@ export interface FileRoutesById {
   '/converter': typeof ConverterRoute
   '/dashboard': typeof DashboardRoute
   '/features': typeof FeaturesRoute
+  '/help': typeof HelpRoute
   '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
   '/super-admin': typeof SuperAdminRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -99,8 +126,11 @@ export interface FileRouteTypes {
     | '/converter'
     | '/dashboard'
     | '/features'
+    | '/help'
     | '/pricing'
+    | '/privacy'
     | '/super-admin'
+    | '/terms'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -109,8 +139,11 @@ export interface FileRouteTypes {
     | '/converter'
     | '/dashboard'
     | '/features'
+    | '/help'
     | '/pricing'
+    | '/privacy'
     | '/super-admin'
+    | '/terms'
   id:
     | '__root__'
     | '/'
@@ -119,8 +152,11 @@ export interface FileRouteTypes {
     | '/converter'
     | '/dashboard'
     | '/features'
+    | '/help'
     | '/pricing'
+    | '/privacy'
     | '/super-admin'
+    | '/terms'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -130,12 +166,22 @@ export interface RootRouteChildren {
   ConverterRoute: typeof ConverterRoute
   DashboardRoute: typeof DashboardRoute
   FeaturesRoute: typeof FeaturesRoute
+  HelpRoute: typeof HelpRoute
   PricingRoute: typeof PricingRoute
+  PrivacyRoute: typeof PrivacyRoute
   SuperAdminRoute: typeof SuperAdminRoute
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/super-admin': {
       id: '/super-admin'
       path: '/super-admin'
@@ -143,11 +189,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/pricing': {
       id: '/pricing'
       path: '/pricing'
       fullPath: '/pricing'
       preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/features': {
@@ -202,8 +262,11 @@ const rootRouteChildren: RootRouteChildren = {
   ConverterRoute: ConverterRoute,
   DashboardRoute: DashboardRoute,
   FeaturesRoute: FeaturesRoute,
+  HelpRoute: HelpRoute,
   PricingRoute: PricingRoute,
+  PrivacyRoute: PrivacyRoute,
   SuperAdminRoute: SuperAdminRoute,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

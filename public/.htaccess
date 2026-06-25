@@ -1,0 +1,17 @@
+<IfModule mod_headers.c>
+  Header set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  
+  # Uncomment the lines below if your Node.js backend is running on the same server (e.g., cPanel/Hostinger)
+  # RewriteCond %{REQUEST_URI} ^/api [NC]
+  # RewriteRule ^(.*)$ http://127.0.0.1:5000/$1 [P,L]
+
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>

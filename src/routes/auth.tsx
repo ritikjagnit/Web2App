@@ -15,7 +15,8 @@ import { auth as firebaseAuth, googleProvider } from "@/lib/firebase";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in — stufflas" },
+      { title: "Sign in — AppOrbit" },
+      { name: "keywords", content: "web to apk, web to app, website to android app, apk builder, pwa to apk" },
       { name: "description", content: "Sign in or create an account to start building Android apps." },
     ],
   }),
@@ -71,7 +72,12 @@ function AuthPage() {
           }, { onConflict: 'id' });
         }
 
-        toast.success("Account created! Check your email to verify.");
+        // Sign out immediately so they have to login
+        await supabase.auth.signOut();
+
+        toast.success("Account created successfully! Please sign in.");
+        setMode("signin");
+        setPassword("");
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -102,52 +108,13 @@ function AuthPage() {
       if (result.user) {
         const fUser = result.user;
         const email = fUser.email!;
-        const password = fUser.uid + "SupabaseSync!"; // deterministic password based on Firebase UID
 
-        // Try to sign in to Supabase first
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-
-        if (signInError) {
-          // If sign in fails, it might be a new user, so sign up
-          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              data: { display_name: fUser.displayName }
-            }
-          });
-
-          if (signUpError) {
-            toast.error("Email already registered. Please use email/password to sign in.");
-            return;
-          }
-
-          // If Supabase requires email verification, session will be null
-          if (!signUpData.session) {
-            toast.success("Account created! Please check your Gmail to verify it, then click Continue with Gmail again.");
-            return;
-          }
-
-          // Create profile if session exists
-          if (signUpData.user) {
-            await supabase.from("profiles").upsert({
-              id: signUpData.user.id,
-              display_name: fUser.displayName || email.split('@')[0],
-              plan: 'free',
-            }, { onConflict: 'id' });
-          }
-        } else {
-          // If sign in succeeded, ensure profile exists
-          if (signInData.session?.user) {
-            await supabase.from("profiles").upsert({
-              id: signInData.session.user.id,
-              display_name: fUser.displayName || email.split('@')[0],
-            }, { onConflict: 'id' });
-          }
-        }
+        // Create/Update local profile in our mock DB (localStorage)
+        await supabase.from("profiles").upsert({
+          id: fUser.uid,
+          display_name: fUser.displayName || email.split('@')[0],
+          plan: 'free',
+        }, { onConflict: 'id' });
 
         toast.success("Welcome back!");
         navigate({ to: "/dashboard" });
@@ -159,56 +126,137 @@ function AuthPage() {
     }
   };
 
+  const handleForgotPassword = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast.error("Please enter your email address first.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) throw error;
+      toast.success("Password reset email sent successfully! Please check your inbox.");
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to send reset email");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 grid-bg">
+    <div 
+      className="min-h-screen flex items-center justify-center px-4 grid-bg relative overflow-hidden"
+      onClick={() => {
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          navigate({ to: "/" });
+        }
+      }}
+    >
+      {/* Premium Ambient Background Glow Blobs */}
+      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/20 rounded-full blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: "8s" }} />
+      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-accent/20 rounded-full blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: "12s" }} />
+
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md glass rounded-3xl p-8 neon-glow"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 30, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="w-full max-w-md glass rounded-[2.5rem] p-10 relative z-10 shadow-[0_20px_50px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-border"
       >
-        <Link to="/" className="flex items-center gap-2 justify-center mb-8">
-          <div className="h-10 w-10 rounded-xl gradient-bg flex items-center justify-center">
-            <Smartphone className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="font-display font-bold text-xl">stufflas<span className="gradient-text">.io</span></span>
+        <Link to="/" className="flex flex-col items-center gap-2 justify-center mb-8 group">
+          <span className="font-display font-bold text-3xl tracking-tight text-foreground flex items-center gap-1.5">
+            Join <span className="gradient-text font-black">AppOrbit</span>
+          </span>
         </Link>
 
-        <h1 className="text-2xl font-display font-bold text-center mb-2">
+        <h1 className="text-2xl font-display font-bold text-center mb-1 text-foreground">
           {mode === "signin" ? "Welcome back" : "Create your account"}
         </h1>
-        <p className="text-sm text-muted-foreground text-center mb-6">
-          {mode === "signin" ? "Sign in to manage your apps" : "Start building in seconds"}
+        <p className="text-xs text-muted-foreground text-center mb-8">
+          {mode === "signin" ? "Access your mobile app build studio" : "Compile websites to APK packages in seconds"}
         </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-5">
           {mode === "signup" && (
             <div className="space-y-2">
-              <Label htmlFor="name">Display name</Label>
-              <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Jane Doe" required />
+              <Label htmlFor="name" className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Display name</Label>
+              <Input 
+                id="name" 
+                value={displayName} 
+                onChange={(e) => setDisplayName(e.target.value)} 
+                placeholder="Jane Doe" 
+                required 
+                className="h-11 rounded-xl text-sm"
+              />
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
+            <Label htmlFor="email" className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Email address</Label>
+            <Input 
+              id="email" 
+              type="email" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              placeholder="you@example.com" 
+              required 
+              className="h-11 rounded-xl text-sm"
+            />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password" className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Password</Label>
+              {mode === "signin" && (
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-[10px] text-primary hover:underline font-semibold uppercase tracking-wider bg-transparent border-none p-0 cursor-pointer outline-none focus:outline-none"
+                  disabled={loading}
+                >
+                  Forgot?
+                </button>
+              )}
+            </div>
+            <Input 
+              id="password" 
+              type="password" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              placeholder="••••••••" 
+              required 
+              className="h-11 rounded-xl text-sm"
+            />
           </div>
-          <Button variant="hero" size="lg" type="submit" className="w-full" disabled={loading}>
-            {loading ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
+
+          <Button variant="hero" size="xl" type="submit" className="w-full h-12 rounded-xl mt-2 flex items-center justify-center font-bold tracking-wide" disabled={loading}>
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Processing...
+              </span>
+            ) : mode === "signin" ? (
+              "Sign In"
+            ) : (
+              "Create Account"
+            )}
           </Button>
         </form>
 
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-6 flex items-center gap-3">
           <div className="flex-1 h-px bg-border"></div>
-          <span className="text-xs text-muted-foreground uppercase font-medium tracking-wider">OR</span>
+          <span className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">OR</span>
           <div className="flex-1 h-px bg-border"></div>
         </div>
 
         <Button
           variant="glass"
           size="lg"
-          className="w-full mt-4 flex items-center justify-center gap-2"
+          className="w-full mt-4 h-12 rounded-xl flex items-center justify-center gap-3 border border-border hover:bg-muted/50 transition-all text-foreground font-medium text-sm"
           onClick={handleGoogleSignIn}
           disabled={loading}
         >
@@ -218,17 +266,17 @@ function AuthPage() {
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
           </svg>
-          Continue with Gmail
+          Continue with Google
         </Button>
 
-        <div className="mt-6 text-center text-sm text-muted-foreground">
+        <div className="mt-8 text-center text-xs text-muted-foreground">
           {mode === "signin" ? (
-            <>Don't have an account?{" "}
-              <button onClick={() => setMode("signup")} className="text-primary hover:underline">Sign up</button>
+            <>New to AppOrbit?{" "}
+              <button onClick={() => setMode("signup")} className="text-primary hover:underline font-bold transition-all">Create an account</button>
             </>
           ) : (
             <>Already have an account?{" "}
-              <button onClick={() => setMode("signin")} className="text-primary hover:underline">Sign in</button>
+              <button onClick={() => setMode("signin")} className="text-primary hover:underline font-bold transition-all">Sign in here</button>
             </>
           )}
         </div>

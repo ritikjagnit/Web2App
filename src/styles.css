@@ -137,6 +137,7 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: ui-sans-serif, system-ui, sans-serif;
+    overflow-x: hidden;
   }
   body {
     background-image:

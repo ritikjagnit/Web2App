@@ -43,7 +43,7 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Admin Console — stufflas" }] }),
+  head: () => ({ meta: [{ title: "Admin Console — AppOrbit" }, { name: "keywords", content: "web to apk, web to app, website to android app, apk builder, pwa to apk" }] }),
   component: AdminPage,
 });
 
@@ -214,7 +214,7 @@ function AdminPage() {
               <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Search resources..." 
-                className="pl-10 h-10 bg-black/20 border-none" 
+                className="pl-10 h-10 bg-foreground/[0.05] border border-border/40 rounded-xl" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -223,9 +223,9 @@ function AdminPage() {
 
           {/* USERS TAB */}
           <TabsContent value="users">
-            <div className="glass rounded-[2rem] overflow-hidden border-white/5">
+            <div className="glass rounded-[2rem] overflow-hidden border-border/40">
               <Table>
-                <TableHeader className="bg-white/5">
+                <TableHeader className="bg-foreground/[0.03]">
                   <TableRow className="hover:bg-transparent">
                     <TableHead>User</TableHead>
                     <TableHead>User ID</TableHead>
@@ -236,7 +236,7 @@ function AdminPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredProfiles.map((p) => (
-                    <TableRow key={p.id} className="hover:bg-white/5 transition-colors border-white/5">
+                    <TableRow key={p.id} className="hover:bg-foreground/[0.02] transition-colors border-border/40">
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="h-9 w-9 rounded-full gradient-bg flex items-center justify-center text-xs font-bold text-primary-foreground">
@@ -250,7 +250,7 @@ function AdminPage() {
                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                           p.plan === 'business' ? 'bg-amber-500/20 text-amber-500 border border-amber-500/20' :
                           p.plan === 'pro' ? 'bg-primary/20 text-primary border border-primary/20' :
-                          'bg-muted text-muted-foreground border border-white/10'
+                          'bg-muted text-muted-foreground border border-border/40'
                         }`}>
                           {p.plan}
                         </span>
@@ -263,13 +263,13 @@ function AdminPage() {
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="glass border-white/10">
+                          <DropdownMenuContent align="end" className="glass border-border/40">
                             <DropdownMenuLabel>Manage User</DropdownMenuLabel>
-                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuSeparator className="bg-border/40" />
                             <DropdownMenuItem onClick={() => updatePlan(p.id, "free")}>Set Free Plan</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => updatePlan(p.id, "pro")}>Set Pro Plan</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => updatePlan(p.id, "business")}>Set Business Plan</DropdownMenuItem>
-                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuSeparator className="bg-border/40" />
                             <DropdownMenuItem className="text-destructive">Ban User</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -286,9 +286,9 @@ function AdminPage() {
 
           {/* APPS TAB */}
           <TabsContent value="apps">
-            <div className="glass rounded-[2rem] overflow-hidden border-white/5">
+            <div className="glass rounded-[2rem] overflow-hidden border-border/40">
               <Table>
-                <TableHeader className="bg-white/5">
+                <TableHeader className="bg-foreground/[0.03]">
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Application</TableHead>
                     <TableHead>Owner ID</TableHead>
@@ -299,10 +299,10 @@ function AdminPage() {
                 </TableHeader>
                 <TableBody>
                   {apps.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase())).map((a) => (
-                    <TableRow key={a.id} className="hover:bg-white/5 transition-colors border-white/5">
+                    <TableRow key={a.id} className="hover:bg-foreground/[0.02] transition-colors border-border/40">
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                          <div className="h-10 w-10 rounded-lg bg-foreground/[0.03] border border-border/40 flex items-center justify-center shrink-0">
                             {a.icon_url ? (
                               <img src={a.icon_url} className="h-8 w-8 rounded-md object-cover" />
                             ) : (
@@ -347,9 +347,9 @@ function AdminPage() {
 
           {/* BUILDS TAB */}
           <TabsContent value="builds">
-            <div className="glass rounded-[2rem] overflow-hidden border-white/5">
+            <div className="glass rounded-[2rem] overflow-hidden border-border/40">
               <Table>
-                <TableHeader className="bg-white/5">
+                <TableHeader className="bg-foreground/[0.03]">
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Build ID</TableHead>
                     <TableHead>Status</TableHead>
@@ -360,7 +360,7 @@ function AdminPage() {
                 </TableHeader>
                 <TableBody>
                   {builds.map((b) => (
-                    <TableRow key={b.id} className="hover:bg-white/5 transition-colors border-white/5">
+                    <TableRow key={b.id} className="hover:bg-foreground/[0.02] transition-colors border-border/40">
                       <TableCell className="font-mono text-xs">{b.id.slice(0, 13)}...</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -374,7 +374,7 @@ function AdminPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div className="w-16 h-1.5 bg-foreground/[0.05] rounded-full overflow-hidden">
                             <div className="h-full bg-primary" style={{ width: `${b.progress}%` }} />
                           </div>
                           <span className="text-[10px] font-mono">{b.progress}%</span>
@@ -406,10 +406,10 @@ function AdminStat({ icon: Icon, label, value, trend, color }: { icon: any; labe
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -5 }}
-      className="glass rounded-2xl p-6 border-white/5 shadow-sm"
+      className="glass rounded-2xl p-6 border-border/40 shadow-sm"
     >
       <div className="flex items-center justify-between mb-4">
-        <div className={`h-11 w-11 rounded-xl bg-white/5 flex items-center justify-center ${color}`}>
+        <div className={`h-11 w-11 rounded-xl bg-foreground/[0.03] flex items-center justify-center ${color}`}>
           <Icon className="h-6 w-6" />
         </div>
         <div className="text-[10px] font-bold text-emerald-500 flex items-center">

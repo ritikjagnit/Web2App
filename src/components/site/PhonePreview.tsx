@@ -24,11 +24,12 @@ interface Props {
   iconUrl?: string;
   navStyle?: "top" | "bottom";
   hasSubscription?: boolean;
+  deviceMode?: "android" | "ios";
 }
 
 type Tab = "home" | "search" | "alerts" | "profile";
 
-export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed", iconUrl, navStyle = "bottom", hasSubscription = false }: Props) {
+export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed", iconUrl, navStyle = "bottom", hasSubscription = false, deviceMode = "android" }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [isLoading, setIsLoading] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
@@ -277,37 +278,63 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
       initial={{ opacity: 0, scale: 0.94 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.8, ease: "easeOut" }}
-      className="relative z-10"
+      className="relative z-10 flex justify-center w-full"
     >
       {/* Premium Simulator Phone Frame */}
-      <div className="relative w-[326px] h-[670px] rounded-[3.2rem] bg-zinc-950 p-[10px] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.8)] border-[6px] border-zinc-800 ring-1 ring-white/10 overflow-hidden flex flex-col">
+      <div className="relative w-[280px] h-[575px] sm:w-[326px] sm:h-[670px] rounded-[2.5rem] sm:rounded-[3.2rem] bg-zinc-950 p-[8px] sm:p-[10px] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.8)] border-[5px] sm:border-[6px] border-zinc-800 ring-1 ring-white/10 overflow-hidden flex flex-col">
 
         {/* Dynamic Speaker Notch / Camera bar */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 w-36 h-7 bg-zinc-950 rounded-b-[1.5rem] flex items-center justify-center gap-2">
-          <div className="w-10 h-1 bg-zinc-800 rounded-full" />
-          <div className="w-2 h-2 bg-zinc-800 rounded-full" />
-        </div>
+        {deviceMode === "ios" ? (
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 w-28 sm:w-36 h-6 sm:h-7 bg-zinc-950 rounded-b-[1.2rem] sm:rounded-b-[1.5rem] flex items-center justify-center gap-1.5 sm:gap-2">
+            <div className="w-8 sm:w-10 h-0.5 sm:h-1 bg-zinc-800 rounded-full" />
+            <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-zinc-800 rounded-full" />
+          </div>
+        ) : (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 w-4 h-4 bg-zinc-950 rounded-full flex items-center justify-center">
+            <div className="w-1.5 h-1.5 bg-zinc-800 rounded-full opacity-60" />
+          </div>
+        )}
 
         {/* Screen Container */}
-        <div className="relative w-full h-full rounded-[2.6rem] overflow-hidden bg-white flex flex-col shadow-inner">
+        <div className="relative w-full h-full rounded-[2rem] sm:rounded-[2.6rem] overflow-hidden bg-white flex flex-col shadow-inner">
 
           {/* Native Status Bar */}
           <div
-            className="h-10 flex items-end justify-between px-6 pb-1 text-[11px] text-white font-bold select-none z-40 transition-colors duration-500 shrink-0"
+            className={`h-10 flex items-end justify-between px-6 pb-1 text-[11px] text-white font-bold select-none z-40 transition-colors duration-500 shrink-0 ${deviceMode === "android" ? "font-sans" : ""}`}
             style={{ backgroundColor: themeColor }}
           >
-            <span>9:41</span>
-            <div className="flex gap-1.5 items-center">
-              {/* Battery indicator */}
-              <div className="flex items-center gap-0.5 opacity-90">
-                <span className="h-1.5 w-0.5 bg-white/40 rounded-full" />
-                <span className="h-2 w-0.5 bg-white/60 rounded-full" />
-                <span className="h-2.5 w-0.5 bg-white rounded-full" />
-              </div>
-              <div className="w-5 h-2.5 rounded-sm border border-white/60 p-0.5 flex items-center justify-start">
-                <div className="w-full h-full bg-white rounded-[1px]" />
-              </div>
-            </div>
+            {deviceMode === "ios" ? (
+              <>
+                <span>9:41</span>
+                <div className="flex gap-1.5 items-center">
+                  <div className="flex items-center gap-0.5 opacity-90">
+                    <span className="h-1.5 w-0.5 bg-white/40 rounded-full" />
+                    <span className="h-2 w-0.5 bg-white/60 rounded-full" />
+                    <span className="h-2.5 w-0.5 bg-white rounded-full" />
+                  </div>
+                  <div className="w-5 h-2.5 rounded-sm border border-white/60 p-0.5 flex items-center justify-start">
+                    <div className="w-full h-full bg-white rounded-[1px]" />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <span>10:00</span>
+                <div className="flex gap-1.5 items-center opacity-90">
+                  {/* Android style signal and battery */}
+                  <div className="flex items-end gap-0.5 h-2.5">
+                    <span className="h-1 w-0.5 bg-white/60 rounded-sm" />
+                    <span className="h-1.5 w-0.5 bg-white/80 rounded-sm" />
+                    <span className="h-2 w-0.5 bg-white rounded-sm" />
+                    <span className="h-2.5 w-0.5 bg-white rounded-sm" />
+                  </div>
+                  <div className="w-3.5 h-3.5 rounded-sm border border-white/60 flex items-center justify-center relative">
+                    <div className="w-full h-full bg-white rounded-sm scale-75" />
+                    <span className="absolute -left-0.5 top-1/2 -translate-y-1/2 w-0.5 h-1 bg-white/60 rounded-l-sm" />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
 
@@ -395,7 +422,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
                     <h2 className="text-xl font-black tracking-tight">{appName}</h2>
                     <div className="inline-flex items-center gap-1.5 bg-white/10 border border-white/5 rounded-full px-3 py-1">
                       <Sparkles className="h-3 w-3 text-amber-400" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/90">Progressive Web App</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/90">Android App</span>
                     </div>
                   </motion.div>
 
@@ -410,7 +437,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
                     />
                   </div>
 
-                  <span className="absolute bottom-8 text-[9px] text-white/40 uppercase font-black tracking-wider">Secured by Appify.io</span>
+                  <span className="absolute bottom-8 text-[9px] text-white/40 uppercase font-black tracking-wider">Secured by AppOrbit</span>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -445,7 +472,9 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
           </div>
 
           {/* Safe-Area Bottom Home Indicator Line */}
-          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-28 h-1 bg-zinc-300 rounded-full z-40" />
+          {deviceMode === "ios" && (
+            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-28 h-1 bg-zinc-300 rounded-full z-40" />
+          )}
         </div>
 
         {/* Decorative Side Volume/Power buttons (Physical look) */}

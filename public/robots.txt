@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /super-admin
+Disallow: /dashboard
+
+Sitemap: https://apporbit.in/sitemap.xml

@@ -19,6 +19,12 @@ router.post('/save', async (req, res) => {
     `;
     
     try {
+        const profileResult = await pool.query('SELECT plan FROM profiles WHERE id = $1', [user_id]);
+        const plan = profileResult.rows[0]?.plan || 'free';
+        if (plan !== 'business') {
+            return res.status(403).json({ error: 'AdMob Integration is only available on the Business Plan' });
+        }
+
         await pool.query(query, [user_id, banner_id, interstitial_id]);
         res.json({ success: true, message: 'AdMob configuration saved to Neon DB successfully' });
     } catch (err) {

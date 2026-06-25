@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import type { Session } from "@supabase/supabase-js";
+import type { Session } from "@/integrations/supabase/client";
 
 export function useAuthGuard() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);

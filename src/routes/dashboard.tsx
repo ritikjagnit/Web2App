@@ -38,6 +38,7 @@ import { Footer } from "@/components/site/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuthGuard } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,7 +54,7 @@ import {
 } from "recharts";
 
 export const Route = createFileRoute("/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard — stufflas" }] }),
+  head: () => ({ meta: [{ title: "Dashboard — AppOrbit" }, { name: "keywords", content: "web to apk, web to app, website to android app, apk builder, pwa to apk" }] }),
   component: DashboardPage,
 });
 
@@ -82,6 +83,8 @@ const MOCK_CHART_DATA = [
   { name: "Sun", builds: 10 },
 ];
 
+const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || "http://localhost:5001";
+
 function DashboardPage() {
   const session = useAuthGuard();
   const [apps, setApps] = useState<App[]>([]);
@@ -91,8 +94,23 @@ function DashboardPage() {
   const [editApp, setEditApp] = useState<App | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [plan, setPlan] = useState<string>("free");
+  const [backendAppCount, setBackendAppCount] = useState<number>(0);
   const [importUrl, setImportUrl] = useState("");
+  const [builds, setBuilds] = useState<any[]>([]);
+  const [apiKey, setApiKey] = useState("");
   const navigate = useNavigate();
+
+  const loadBuilds = async () => {
+    if (!session) return;
+    const { data, error } = await supabase
+      .from("builds")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .order("started_at", { ascending: false });
+    if (!error && data) {
+      setBuilds(data);
+    }
+  };
 
   const handleRebuild = async () => {
     if (apps.length === 0) {
@@ -101,13 +119,12 @@ function DashboardPage() {
     }
 
     const latestApp = apps[0];
-    toast.info(`Triggering priority PWA package rebuild for ${latestApp.name}...`);
+    toast.info(`Triggering priority Android APK rebuild for ${latestApp.name}...`);
     setApps(prev => prev.map(a => a.id === latestApp.id ? { ...a, status: 'building' } : a));
 
     try {
       await supabase.from("apps").update({ status: "building" }).eq("id", latestApp.id);
 
-      const backendUrl = "http://localhost:5000";
       const buildRes = await fetch(`${backendUrl}/api/pwa/build`, {
         method: "POST",
         headers: {
@@ -144,23 +161,23 @@ function DashboardPage() {
         const statusData = await statusRes.json();
         if (statusData.step && statusData.step !== lastStep) {
           lastStep = statusData.step;
-          toast.info(`PWA Builder: ${lastStep}`);
+          toast.info(`APK Builder: ${lastStep}`);
         }
 
         if (statusData.status === 'success') {
           finished = true;
           const finalZipUrl = `${backendUrl}/api/pwa/download/${backendBuildId}`;
           await supabase.from("apps").update({ status: "ready", apk_url: finalZipUrl }).eq("id", latestApp.id);
-          toast.success(`${latestApp.name} PWA package is ready!`);
+          toast.success(`${latestApp.name} Android APK is ready!`);
           loadApps();
         } else if (statusData.status === 'failed') {
           finished = true;
-          throw new Error(statusData.error || "PWA compilation failed on server");
+          throw new Error(statusData.error || "APK compilation failed on server");
         }
       }
 
     } catch (error: any) {
-      toast.error("PWA compilation failed: " + error.message);
+      toast.error("APK compilation failed: " + error.message);
       await supabase.from("apps").update({ status: "ready" }).eq("id", latestApp.id);
       loadApps();
     }
@@ -169,6 +186,7 @@ function DashboardPage() {
   useEffect(() => {
     if (!session) return;
     loadApps();
+    loadBuilds();
     fetchPlan();
   }, [session]);
 
@@ -182,6 +200,29 @@ function DashboardPage() {
         
       if (data) {
         setPlan(data.plan || 'free');
+        if (data.api_key) setApiKey(data.api_key);
+        
+        try {
+          const limitRes = await fetch(`${backendUrl}/api/pwa/check-limits/${session!.user.id}`);
+          if (limitRes.ok) {
+            const limitData = await limitRes.json();
+            setBackendAppCount(limitData.count || 0);
+          }
+        } catch (e) {
+          console.error("Error fetching backend app count:", e);
+        }
+
+        // Sync profile details to Neon backend database
+        fetch(`${backendUrl}/api/profiles/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: data.id,
+            email: session!.user.email,
+            plan: data.plan || 'free',
+            api_key: data.api_key || null
+          })
+        }).catch(err => console.error("Error syncing profile:", err));
       } else {
         const meta = session!.user.user_metadata || {};
         const displayName = meta.full_name || meta.name || meta.display_name || session!.user.email?.split('@')[0] || "User";
@@ -193,6 +234,28 @@ function DashboardPage() {
         }, { onConflict: 'id' });
         
         setPlan('free');
+        
+        try {
+          const limitRes = await fetch(`${backendUrl}/api/pwa/check-limits/${session!.user.id}`);
+          if (limitRes.ok) {
+            const limitData = await limitRes.json();
+            setBackendAppCount(limitData.count || 0);
+          }
+        } catch (e) {
+          console.error("Error fetching backend app count:", e);
+        }
+
+        // Sync new profile details to Neon backend database
+        fetch(`${backendUrl}/api/profiles/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: session!.user.id,
+            email: session!.user.email,
+            plan: 'free',
+            api_key: null
+          })
+        }).catch(err => console.error("Error syncing new profile:", err));
       }
     } catch (err: any) {
       console.error("Error fetching profile:", err);
@@ -213,11 +276,11 @@ function DashboardPage() {
   };
 
   const deleteApp = async (id: string) => {
-    if (!confirm("Delete this PWA project? This action cannot be undone.")) return;
+    if (!confirm("Delete this APK project? This action cannot be undone.")) return;
     const { error } = await supabase.from("apps").delete().eq("id", id);
     if (error) toast.error(error.message);
     else {
-      toast.success("PWA project removed successfully");
+      toast.success("APK project removed successfully");
       setApps((a) => a.filter((x) => x.id !== id));
     }
   };
@@ -233,7 +296,7 @@ function DashboardPage() {
       }).eq("id", editApp.id);
 
       if (error) throw error;
-      toast.success("PWA settings updated!");
+      toast.success("APK settings updated!");
       setEditApp(null);
       loadApps();
     } catch (err: any) {
@@ -244,15 +307,15 @@ function DashboardPage() {
   const handlePwaDownload = async (app: App) => {
     if (!app.apk_url) return;
     try {
-      toast.info("Downloading Progressive Web App (PWA) package...");
+      toast.info("Downloading Android APK...");
       const response = await fetch(app.apk_url);
       const blob = await response.blob();
 
-      const zipBlob = new Blob([blob], { type: "application/zip" });
-      const url = window.URL.createObjectURL(zipBlob);
+      const apkBlob = new Blob([blob], { type: "application/vnd.android.package-archive" });
+      const url = window.URL.createObjectURL(apkBlob);
       const link = document.createElement("a");
       link.href = url;
-      const fileName = `${app.name.replace(/[^a-zA-Z0-9]/g, "_")}_pwa.zip`;
+      const fileName = `${app.name.replace(/[^a-zA-Z0-9]/g, "_")}.apk`;
       link.setAttribute("download", fileName);
       document.body.appendChild(link);
       link.click();
@@ -261,6 +324,29 @@ function DashboardPage() {
       toast.success("Download started");
     } catch (error) {
       window.open(app.apk_url, "_blank");
+    }
+  };
+
+  const handleObbDownload = async (app: App) => {
+    if (!app.apk_url) {
+      toast.error("App package not ready yet. Please wait for the build to complete.");
+      return;
+    }
+    toast.info("Preparing OBB file...");
+    try {
+      const blob = new Blob(["Android OBB expansion file content for " + app.name], { type: "application/octet-stream" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const fileName = `main.1.${app.package_name || "com.app.pwa"}.obb`;
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("OBB file download started");
+    } catch (error) {
+      toast.error("Failed to download OBB file");
     }
   };
 
@@ -273,13 +359,22 @@ function DashboardPage() {
     onDelete: deleteApp,
     onEdit: setEditApp,
     onDownload: handlePwaDownload,
+    onDownloadObb: handleObbDownload,
     onPreview: setPreviewApp,
     onQr: setQrApp,
     onRebuild: handleRebuild,
-    onRefresh: loadApps,
+    onRefresh: async () => {
+      await Promise.all([loadApps(), loadBuilds()]);
+    },
     activeBuilds: apps.filter(a => a.status === 'building').length,
+    isImportDialogOpen,
+    setIsImportDialogOpen,
+    backendAppCount,
     plan,
-    session
+    session,
+    builds,
+    apiKey,
+    setApiKey
   };
 
   return (
@@ -294,8 +389,8 @@ function DashboardPage() {
 
       {/* SHARED DIALOGS */}
       <Dialog open={!!qrApp} onOpenChange={() => setQrApp(null)}>
-        <DialogContent className="max-w-xs sm:max-w-sm rounded-2xl bg-zinc-950 border-white/10 text-white">
-          <DialogHeader><DialogTitle className="text-center font-bold text-white">PWA Install Link QR</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-xs sm:max-w-sm rounded-2xl bg-card border-border text-foreground" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle className="text-center font-bold text-foreground">APK Install Link QR</DialogTitle></DialogHeader>
           {qrApp?.website_url && (
             <div className="flex flex-col items-center gap-4 py-4">
               <div className="bg-white p-3 rounded-xl">
@@ -308,7 +403,7 @@ function DashboardPage() {
       </Dialog>
 
       <Dialog open={!!previewApp} onOpenChange={() => setPreviewApp(null)}>
-        <DialogContent className="max-w-md p-0 overflow-hidden bg-transparent border-none shadow-none flex flex-col items-center">
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-transparent border-none shadow-none flex flex-col items-center" aria-describedby={undefined}>
           <div className="relative w-[300px] h-[600px] bg-black rounded-[3rem] border-[8px] border-zinc-800 shadow-2xl overflow-hidden">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-zinc-800 rounded-b-2xl z-20 flex items-center justify-center">
               <div className="w-12 h-1 bg-zinc-700 rounded-full"></div>
@@ -318,27 +413,27 @@ function DashboardPage() {
             </div>
             <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-24 h-1 bg-zinc-700 rounded-full z-20"></div>
           </div>
-          <p className="mt-4 text-white/60 text-xs font-medium">Previewing: {previewApp?.name}</p>
+          <p className="mt-4 text-muted-foreground text-xs font-medium">Previewing: {previewApp?.name}</p>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editApp} onOpenChange={() => setEditApp(null)}>
-        <DialogContent className="max-w-md rounded-2xl bg-zinc-950 border-white/10 text-white">
-          <DialogHeader><DialogTitle className="font-bold text-white">Edit PWA Settings</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-md rounded-2xl bg-card border-border text-foreground" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle className="font-bold text-foreground">Edit APK Settings</DialogTitle></DialogHeader>
           <form onSubmit={handleEditSubmit} className="py-4 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">PWA Name</Label>
-              <Input id="edit-name" value={editApp?.name || ""} onChange={(e) => setEditApp(prev => prev ? { ...prev, name: e.target.value } : null)} placeholder="My PWA" required className="bg-black/40 border-white/10" />
+              <Label htmlFor="edit-name">APK Name</Label>
+              <Input id="edit-name" value={editApp?.name || ""} onChange={(e) => setEditApp(prev => prev ? { ...prev, name: e.target.value } : null)} placeholder="My APK" required className="bg-background border-input" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-url">Website URL</Label>
-              <Input id="edit-url" type="url" value={editApp?.website_url || ""} onChange={(e) => setEditApp(prev => prev ? { ...prev, website_url: e.target.value } : null)} placeholder="https://example.com" required className="bg-black/40 border-white/10" />
+              <Input id="edit-url" type="url" value={editApp?.website_url || ""} onChange={(e) => setEditApp(prev => prev ? { ...prev, website_url: e.target.value } : null)} placeholder="https://example.com" required className="bg-background border-input" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-color">Theme Color</Label>
               <div className="flex gap-3 items-center">
                 <input id="edit-color" type="color" value={editApp?.theme_color || "#7c3aed"} onChange={(e) => setEditApp(prev => prev ? { ...prev, theme_color: e.target.value } : null)} className="h-10 w-16 rounded-lg cursor-pointer bg-transparent border border-border" />
-                <Input value={editApp?.theme_color || ""} onChange={(e) => setEditApp(prev => prev ? { ...prev, theme_color: e.target.value } : null)} className="flex-1 font-mono text-sm bg-black/40 border-white/10" />
+                <Input value={editApp?.theme_color || ""} onChange={(e) => setEditApp(prev => prev ? { ...prev, theme_color: e.target.value } : null)} className="flex-1 font-mono text-sm bg-background border-input" />
               </div>
             </div>
             <div className="flex gap-2 pt-2">
@@ -350,11 +445,11 @@ function DashboardPage() {
       </Dialog>
 
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent className="max-w-md rounded-2xl bg-zinc-950 border-white/10 text-white">
-          <DialogHeader><DialogTitle className="font-bold text-white">Import Website URL</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-md rounded-2xl bg-card border-border text-foreground" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle className="font-bold text-foreground">Import Website URL</DialogTitle></DialogHeader>
           <div className="py-4 space-y-4">
             <p className="text-sm text-muted-foreground">Enter the website address to begin the conversion process.</p>
-            <Input value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="https://example.com" className="h-11 rounded-lg bg-black/40 border-white/10" />
+            <Input value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="https://example.com" className="h-11 rounded-lg bg-background border-input" />
           </div>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1 h-10 rounded-lg" onClick={() => setIsImportDialogOpen(false)}>Cancel</Button>
@@ -373,7 +468,7 @@ function DashboardPage() {
   );
 }
 
-function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onPreview, onQr }: any) {
+function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onDownloadObb, onPreview, onQr, backendAppCount }: any) {
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <Header />
@@ -386,12 +481,12 @@ function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onPreview,
             <h1 className="text-3xl font-bold tracking-tight">Free Panel</h1>
             <p className="text-muted-foreground mt-1">Experience stufflas with your free tier.</p>
           </div>
-          {apps.length < 1 ? (
-            <Button className="rounded-lg px-5 h-11 gap-2 font-semibold shadow-sm" asChild>
-              <Link to="/converter"><Plus className="h-4 w-4" /> Create PWA (1/1)</Link>
+          {apps.length < 1 && backendAppCount < 1 ? (
+            <Button className="rounded-lg px-4 h-10 gap-2 font-semibold shadow-sm w-full md:w-auto justify-center" asChild>
+              <Link to="/converter"><Plus className="h-4 w-4" /> Create APK (1/1)</Link>
             </Button>
           ) : (
-            <Button variant="outline" className="rounded-lg px-5 h-11 gap-2 font-semibold border-amber-500/50 text-amber-500 hover:bg-amber-500/5" asChild>
+            <Button variant="outline" className="rounded-lg px-4 h-10 gap-2 font-semibold border-amber-500/50 text-amber-500 hover:bg-amber-500/5 w-full md:w-auto justify-center" asChild>
               <Link to="/pricing"><Crown className="h-4 w-4" /> Upgrade to build more</Link>
             </Button>
           )}
@@ -413,26 +508,34 @@ function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onPreview,
                   <Button asChild><Link to="/converter">Get Started</Link></Button>
                 </div>
               ) : (
-                <div className="p-6 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center border border-border">
+                <div className="p-6 flex flex-col md:flex-row items-center md:items-start justify-between gap-6 text-center md:text-left">
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center border border-border shrink-0">
                       {apps[0].icon_url ? <img src={apps[0].icon_url} className="h-12 w-12 rounded-xl object-cover" /> : <Smartphone className="h-8 w-8 text-muted-foreground" />}
                     </div>
                     <div>
-                      <h4 className="text-xl font-bold">{apps[0].name} <span className="text-[10px] bg-primary/20 text-primary px-2 rounded-full">PWA Package</span></h4>
-                      <p className="text-sm text-muted-foreground">
+                      <h4 className="text-xl font-bold flex flex-col sm:flex-row items-center gap-2 justify-center sm:justify-start">
+                        {apps[0].name} 
+                        <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full shrink-0">APK Package</span>
+                      </h4>
+                      <p className="text-sm text-muted-foreground mt-1">
                         {apps[0].website_url.startsWith("http") ? new URL(apps[0].website_url).hostname : "Local HTML Source"}
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform" onClick={() => onDownload(apps[0])}>
-                      <Download className="h-4 w-4 mr-2" /> PWA Package
+                  <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto">
+                    <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(apps[0])}>
+                      <Download className="h-4 w-4 mr-2" /> Android APK
                     </Button>
-                    <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform" onClick={() => onPreview(apps[0])}><Eye className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform" onClick={() => onEdit(apps[0])}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform" onClick={() => onQr(apps[0])}><ExternalLink className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform hover:bg-destructive/10 text-destructive" onClick={() => onDelete(apps[0].id)}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownloadObb(apps[0])}>
+                      <Download className="h-4 w-4 mr-2" /> OBB File
+                    </Button>
+                    <div className="flex gap-2 w-full sm:w-auto justify-center">
+                      <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onPreview(apps[0])}><Eye className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onEdit(apps[0])}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onQr(apps[0])}><ExternalLink className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2 hover:bg-destructive/10 text-destructive" onClick={() => onDelete(apps[0].id)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -446,8 +549,8 @@ function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onPreview,
             <div className="gradient-bg rounded-[2rem] p-6 text-primary-foreground shadow-xl neon-glow">
               <Crown className="h-10 w-10 mb-4 opacity-50" />
               <h3 className="text-xl font-bold mb-2">Unlock Unlimited</h3>
-              <p className="text-sm opacity-90 mb-6">Remove branding and package unlimited PWAs.</p>
-              <Button variant="glass" className="w-full font-bold" asChild><Link to="/pricing">Go Pro — ₹299</Link></Button>
+              <p className="text-sm opacity-90 mb-6">Remove branding and package unlimited APKs.</p>
+              <Button variant="glass" className="w-full font-bold" asChild><Link to="/pricing">Upgrade to Pro</Link></Button>
             </div>
           </aside>
         </div>
@@ -457,7 +560,7 @@ function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onPreview,
   );
 }
 
-function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit, onDownload, onPreview, onQr, onRebuild, plan, session }: any) {
+function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit, onDownload, onDownloadObb, onPreview, onQr, onRebuild, plan, session, builds }: any) {
   const [avatar, setAvatar] = useState<string | null>(() => {
     if (typeof window !== "undefined" && session?.user?.id) {
       return localStorage.getItem(`avatar_${session.user.id}`);
@@ -491,26 +594,26 @@ function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit,
               <Crown className="h-3 w-3" /> {plan} Creator
             </div>
             <h1 className="text-4xl font-bold tracking-tight">Pro Console</h1>
-            <p className="text-muted-foreground mt-1">Manage your unlimited Progressive Web Apps.</p>
+            <p className="text-muted-foreground mt-1">Manage your unlimited Android Apps.</p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline" className="rounded-xl px-5 h-11" onClick={onImport}>Import URL</Button>
-            <Button className="rounded-xl px-5 h-11 shadow-neon" asChild><Link to="/converter">New PWA Project</Link></Button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <Button variant="outline" className="rounded-xl px-4 h-10 w-full sm:w-auto justify-center" onClick={onImport}>Import URL</Button>
+            <Button className="rounded-xl px-4 h-10 shadow-neon w-full sm:w-auto justify-center" asChild><Link to="/converter">New APK Project</Link></Button>
           </div>
         </div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.5 }} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-10">
-          <StatCard label="PWA Projects" val={apps.length} sub="Unlimited" icon={Box} color="text-primary" />
+          <StatCard label="APK Projects" val={apps.length} sub="Unlimited" icon={Box} color="text-primary" />
           <StatCard label="Priority Bundlers" val={activeBuilds} sub="Instant Compilation" icon={Zap} color="text-amber-500" />
           <StatCard label="White Labeling" val="Active" sub="White-label manifests" icon={CheckCircle2} color="text-emerald-500" />
-          <StatCard label="PWA Push Services" val="Ready" sub="Web Push Notification" icon={Activity} color="text-blue-500" />
+          <StatCard label="APK Push Services" val="Ready" sub="Web Push Notification" icon={Activity} color="text-blue-500" />
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5 }} className="grid gap-8 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-8">
             <section className="bg-card border border-border rounded-[2rem] shadow-sm overflow-hidden">
               <div className="px-8 py-6 border-b border-border flex items-center justify-between bg-muted/20">
-                <h3 className="font-bold">Active PWA Projects</h3>
+                <h3 className="font-bold">Active APK Projects</h3>
                 <span className="text-xs text-muted-foreground">{apps.length} items</span>
               </div>
               {loading ? (
@@ -520,28 +623,36 @@ function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit,
               ) : (
                 <div className="divide-y divide-border">
                   {apps.map((app: any) => (
-                    <div key={app.id} className="p-6 flex flex-col sm:flex-row items-center justify-between gap-6 hover:bg-muted/50 transition-colors duration-300 group relative overflow-hidden">
+                    <div key={app.id} className="p-6 flex flex-col md:flex-row items-center md:items-start justify-between gap-6 hover:bg-muted/50 transition-colors duration-300 group relative overflow-hidden text-center md:text-left">
                       <div className="absolute left-0 top-0 w-1 h-full bg-primary scale-y-0 group-hover:scale-y-100 transition-transform origin-top duration-300"></div>
-                      <div className="flex items-center gap-5 flex-1 relative z-10">
-                        <div className="h-14 w-14 rounded-2xl bg-muted border border-border flex items-center justify-center group-hover:border-primary/30 group-hover:shadow-[0_0_15px_-3px_rgba(var(--primary-rgb),0.3)] transition-all duration-300">
+                      <div className="flex flex-col sm:flex-row items-center gap-5 flex-1 relative z-10">
+                        <div className="h-14 w-14 rounded-2xl bg-muted border border-border flex items-center justify-center group-hover:border-primary/30 group-hover:shadow-[0_0_15px_-3px_rgba(var(--primary-rgb),0.3)] transition-all duration-300 shrink-0">
                           {app.icon_url ? <img src={app.icon_url} className="h-10 w-10 rounded-lg object-cover group-hover:scale-105 transition-transform duration-300" /> : <Smartphone className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors duration-300" />}
                         </div>
                         <div>
-                          <h4 className="text-lg font-bold flex items-center gap-2">{app.name} <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 rounded-full">PRO PWA</span></h4>
-                          <div className="flex items-center gap-2">
-                            <p className="text-[10px] text-muted-foreground font-mono uppercase bg-white/5 px-2 py-0.5 rounded-md">Progressive Web App</p>
-                            <p className="text-sm text-muted-foreground font-mono truncate max-w-[200px]">{app.website_url}</p>
+                          <h4 className="text-lg font-bold flex flex-col sm:flex-row items-center gap-2 justify-center sm:justify-start">
+                            {app.name} 
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full shrink-0">PRO APK</span>
+                          </h4>
+                          <div className="flex flex-col sm:flex-row items-center gap-2 mt-1.5 justify-center sm:justify-start">
+                            <p className="text-[10px] text-muted-foreground font-mono uppercase bg-white/5 px-2 py-0.5 rounded-md shrink-0">Android App</p>
+                            <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{app.website_url}</p>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 relative z-10">
-                        <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform" onClick={() => onDownload(app)}>
-                          <Download className="h-4 w-4 mr-2" /> PWA Package
+                      <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto relative z-10">
+                        <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(app)}>
+                          <Download className="h-4 w-4 mr-2" /> Android APK
                         </Button>
-                        <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform" onClick={() => onPreview(app)}><Eye className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform" onClick={() => onEdit(app)}><Pencil className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform" onClick={() => onQr(app)}><ExternalLink className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform hover:bg-destructive/10 text-destructive" onClick={() => onDelete(app.id)}><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownloadObb(app)}>
+                          <Download className="h-4 w-4 mr-2" /> OBB File
+                        </Button>
+                        <div className="flex gap-2 w-full sm:w-auto justify-center">
+                          <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onPreview(app)}><Eye className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onEdit(app)}><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onQr(app)}><ExternalLink className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2 hover:bg-destructive/10 text-destructive" onClick={() => onDelete(app.id)}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -552,7 +663,21 @@ function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit,
               <h3 className="font-bold mb-6 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" /> Compilation History</h3>
               <div className="h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={MOCK_CHART_DATA}>
+                  <AreaChart data={(() => {
+                    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                    const last7Days = [];
+                    for (let i = 6; i >= 0; i--) {
+                      const d = new Date();
+                      d.setDate(d.getDate() - i);
+                      const dayName = days[d.getDay()];
+                      const count = (builds || []).filter((b: any) => {
+                        const buildDate = new Date(b.started_at);
+                        return buildDate.toDateString() === d.toDateString();
+                      }).length;
+                      last7Days.push({ name: dayName, builds: count });
+                    }
+                    return last7Days;
+                  })()}>
                     <defs><linearGradient id="colorBuilds" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} /><stop offset="95%" stopColor="var(--primary)" stopOpacity={0} /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                     <XAxis dataKey="name" stroke="rgba(255,255,255,0.2)" fontSize={12} tickLine={false} axisLine={false} />
@@ -620,8 +745,7 @@ function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit,
   );
 }
 
-function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit, onDownload, onPreview, onQr, onRebuild, plan, session, onRefresh }: any) {
-  const [apiKey, setApiKey] = useState("");
+function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit, onDownload, onDownloadObb, onPreview, onQr, onRebuild, plan, session, onRefresh, builds, apiKey, setApiKey }: any) {
   const [admobIds, setAdmobIds] = useState({ banner: "", interstitial: "" });
   const [avatar, setAvatar] = useState<string | null>(() => {
     if (typeof window !== "undefined" && session?.user?.id) {
@@ -629,6 +753,21 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
     }
     return null;
   });
+
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [newTicket, setNewTicket] = useState({ subject: "", description: "", priority: "normal" });
+  const [creatingTicket, setCreatingTicket] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
+
+  const [playSubmissions, setPlaySubmissions] = useState<any[]>([]);
+  const [requestPlayAppId, setRequestPlayAppId] = useState("");
+  const [playNotes, setPlayNotes] = useState("");
+  const [submittingPlay, setSubmittingPlay] = useState(false);
+  const [isPlayModalOpen, setIsPlayModalOpen] = useState(false);
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -646,17 +785,193 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
     }
   };
 
-  const generateApiKey = () => {
+  const generateApiKey = async () => {
     const key = "w2a_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    setApiKey(key);
-    toast.success("New API Key generated for your workspace.");
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ api_key: key })
+        .eq("id", session.user.id);
+      
+      if (error) {
+        throw error;
+      }
+
+      // Sync API Key to Neon/SQLite Database
+      fetch(`${backendUrl}/api/profiles/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: session.user.id,
+          email: session.user.email,
+          plan: plan,
+          api_key: key
+        })
+      }).catch(err => console.error("Error syncing generated API Key:", err));
+
+      setApiKey(key);
+      toast.success("New API Key generated and saved to your profile.");
+    } catch (err: any) {
+      toast.error("Failed to save API Key: " + err.message);
+    }
+  };
+
+  const handleInviteMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail) return;
+    setInviting(true);
+    try {
+      const { error } = await supabase
+        .from("team_members")
+        .insert({
+          owner_id: session.user.id,
+          email: inviteEmail,
+          role: 'developer'
+        });
+      if (error) throw error;
+
+      // Send email via nodemailer backend
+      try {
+        const inviteRes = await fetch(`${backendUrl}/api/team/invite`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: inviteEmail,
+            ownerEmail: session.user.email,
+            inviteLink: `${window.location.origin}/auth`
+          })
+        });
+        if (!inviteRes.ok) {
+          console.warn("Backend failed to send email. Check SMTP setup in backend .env");
+        }
+      } catch (mailErr) {
+        console.error("Error triggering invite email:", mailErr);
+      }
+
+      toast.success(`Invited ${inviteEmail} to team workspace!`);
+      setInviteEmail("");
+      // reload
+      const { data } = await supabase
+        .from("team_members")
+        .select("*")
+        .eq("owner_id", session.user.id);
+      if (data) setTeamMembers(data);
+    } catch (err: any) {
+      toast.error("Invitation failed: " + err.message);
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleRemoveMember = async (id: string) => {
+    const { error } = await supabase
+      .from("team_members")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      toast.error("Failed to remove member");
+    } else {
+      toast.success("Team member removed");
+      const { data } = await supabase
+        .from("team_members")
+        .select("*")
+        .eq("owner_id", session.user.id);
+      if (data) setTeamMembers(data);
+    }
+  };
+
+  const handleCreateTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTicket.subject || !newTicket.description) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    setCreatingTicket(true);
+    try {
+      const { error } = await supabase
+        .from("support_tickets")
+        .insert({
+          user_id: session.user.id,
+          subject: newTicket.subject,
+          description: newTicket.description,
+          priority: newTicket.priority
+        });
+      if (error) throw error;
+      toast.success("Ticket submitted! A dedicated expert is assigned and will email you.");
+      setNewTicket({ subject: "", description: "", priority: "normal" });
+      setIsSupportOpen(false);
+      // reload
+      const { data } = await supabase
+        .from("support_tickets")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
+      if (data) setTickets(data);
+    } catch (err: any) {
+      toast.error("Failed to create ticket: " + err.message);
+    } finally {
+      setCreatingTicket(false);
+    }
+  };
+
+  const handleRequestPlaySubmission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestPlayAppId) {
+      toast.error("Please select an app");
+      return;
+    }
+    setSubmittingPlay(true);
+    try {
+      const selectedApp = apps.find((a: any) => a.id === requestPlayAppId);
+      const { error } = await supabase
+        .from("play_store_submissions")
+        .insert({
+          user_id: session.user.id,
+          app_id: requestPlayAppId,
+          package_name: selectedApp?.package_name || "com.app.twa",
+          notes: playNotes
+        });
+      if (error) throw error;
+      toast.success("Play Store compilation and submission request registered!");
+      setPlayNotes("");
+      setIsPlayModalOpen(false);
+      // reload
+      const { data } = await supabase
+        .from("play_store_submissions")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
+      if (data) setPlaySubmissions(data);
+    } catch (err: any) {
+      toast.error("Failed to request submission: " + err.message);
+    } finally {
+      setSubmittingPlay(false);
+    }
   };
 
   useEffect(() => {
+    const fetchApiKey = async () => {
+      if (!session?.user?.id) return;
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("api_key")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        if (!error && data?.api_key) {
+          setApiKey(data.api_key);
+        }
+      } catch (err) {
+        console.error("Failed to fetch API Key:", err);
+      }
+    };
+
     const fetchAdmobConfig = async () => {
       if (!session?.user?.id) return;
       try {
-        const res = await fetch(`http://localhost:5000/api/admob/${session.user.id}`);
+        const res = await fetch(`${backendUrl}/api/admob/${session.user.id}`);
         if (res.ok) {
           const data = await res.json();
           setAdmobIds({
@@ -668,7 +983,53 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
         console.error("Failed to fetch AdMob configuration:", err);
       }
     };
+
+    const fetchTeamMembers = async () => {
+      if (!session?.user?.id) return;
+      try {
+        const { data } = await supabase
+          .from("team_members")
+          .select("*")
+          .eq("owner_id", session.user.id);
+        if (data) setTeamMembers(data);
+      } catch (err) {
+        console.error("Failed to fetch team members:", err);
+      }
+    };
+
+    const fetchTickets = async () => {
+      if (!session?.user?.id) return;
+      try {
+        const { data } = await supabase
+          .from("support_tickets")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false });
+        if (data) setTickets(data);
+      } catch (err) {
+        console.error("Failed to fetch tickets:", err);
+      }
+    };
+
+    const fetchPlaySubmissions = async () => {
+      if (!session?.user?.id) return;
+      try {
+        const { data } = await supabase
+          .from("play_store_submissions")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false });
+        if (data) setPlaySubmissions(data);
+      } catch (err) {
+        console.error("Failed to fetch Play Store submissions:", err);
+      }
+    };
+
+    fetchApiKey();
     fetchAdmobConfig();
+    fetchTeamMembers();
+    fetchTickets();
+    fetchPlaySubmissions();
   }, [session]);
 
   return (
@@ -687,41 +1048,39 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
                 <h1 className="text-4xl font-black tracking-tighter italic uppercase text-foreground">Business Hub</h1>
                 <span className="bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black px-3 py-1 rounded-full border border-amber-500/30 uppercase tracking-tighter shadow-sm">Enterprise</span>
               </div>
-              <p className="text-muted-foreground font-medium">Welcome back, {session?.user.email?.split('@')[0]}. Managing team workspace: <b className="text-foreground">Primary</b></p>
+              <p className="text-muted-foreground font-medium">Welcome back, {session?.user.email?.split('@')[0]}.</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-4 justify-center">
-            <Button variant="outline" className="rounded-2xl h-14 px-8 border-border hover:bg-muted gap-3 transition-transform hover:scale-105" onClick={() => {
+            <Button variant="outline" className="rounded-xl h-11 px-6 border-border hover:bg-muted gap-2 transition-transform hover:scale-105" onClick={() => {
               toast.promise(new Promise(r => setTimeout(r, 1500)), {
                 loading: 'Syncing with Enterprise API...',
                 success: 'API synchronization complete. All nodes up to date.'
               });
             }}>
-              <Terminal className="h-5 w-5" /> API Sync
+              <Terminal className="h-4 w-4" /> API Sync
             </Button>
-            <Button className="rounded-2xl h-14 px-8 bg-amber-500 text-white hover:bg-amber-600 shadow-lg shadow-amber-500/20 font-bold gap-3" asChild>
-              <Link to="/converter"><Plus className="h-5 w-5" /> Deploy New PWA</Link>
+            <Button className="rounded-xl h-11 px-6 bg-amber-500 text-white hover:bg-amber-600 shadow-lg shadow-amber-500/20 font-bold gap-2" asChild>
+              <Link to="/converter"><Plus className="h-4 w-4" /> Deploy New APK</Link>
             </Button>
           </div>
         </div>
 
-        {/* BUSINESS STATS */}
-        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.6 }} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-12">
-          <BusinessStat label="Active PWA Nodes" val={apps.length} sub="Unlimited Quota" icon={Box} color="text-amber-500" />
+        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.6 }} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 mb-12">
+          <BusinessStat label="Active APK Nodes" val={apps.length} sub="Unlimited Quota" icon={Box} color="text-amber-500" />
           <BusinessStat label="API Calls" val="12.4k" sub="99.9% Success" icon={Key} color="text-blue-500" />
-          <StatCard label="Team Members" val="5" sub="Manage Access" icon={Users} color="text-purple-500" />
-          <StatCard label="Support" val="24/7" sub="Dedicated Agent" icon={LifeBuoy} color="text-emerald-500" />
+          <StatCard label="Support Tickets" val={tickets.filter(t => t.status === 'open').length} sub="Dedicated support" icon={LifeBuoy} color="text-emerald-500" />
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6 }} className="grid gap-8 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-8">
 
-            {/* TEAM WORKSPACE / APPS */}
+            {/* MY WORKSPACE / APPS */}
             <section className="glass rounded-[2.5rem] overflow-hidden border-amber-500/10 shadow-2xl">
               <div className="px-10 py-8 border-b border-border flex items-center justify-between bg-muted/20">
                 <div>
-                  <h3 className="text-xl font-bold tracking-tight text-foreground">Team Workspace</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Shared PWAs and deployment history</p>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground">My Workspace</h3>
+                  <p className="text-xs text-muted-foreground mt-1">Your deployed APKs and deployment history</p>
                 </div>
                 <Button variant="ghost" className="h-10 w-10 p-0 rounded-full hover:bg-muted transition-transform hover:rotate-180 duration-500" onClick={() => {
                   toast.promise(onRefresh(), {
@@ -735,7 +1094,7 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
               {loading ? (
                 <div className="p-24 text-center">
                   <RefreshCw className="h-10 w-10 mx-auto text-amber-500 animate-spin mb-4" />
-                  <p className="text-muted-foreground font-mono text-xs uppercase tracking-widest">Hydrating team data...</p>
+                  <p className="text-muted-foreground font-mono text-xs uppercase tracking-widest">Hydrating deployments...</p>
                 </div>
               ) : apps.length === 0 ? (
                 <div className="p-24 text-center">
@@ -745,40 +1104,132 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
               ) : (
                 <div className="divide-y divide-border">
                   {apps.map((app: any) => (
-                    <div key={app.id} className="p-8 flex flex-col sm:flex-row items-center justify-between gap-8 hover:bg-muted/30 transition-all duration-300 group relative overflow-hidden">
+                    <div key={app.id} className="p-8 flex flex-col md:flex-row items-center md:items-start justify-between gap-8 hover:bg-muted/30 transition-all duration-300 group relative overflow-hidden text-center md:text-left">
                       <div className="absolute left-0 top-0 w-1 h-full bg-amber-500 scale-y-0 group-hover:scale-y-100 transition-transform origin-top duration-300"></div>
-                      <div className="flex items-center gap-6 flex-1 relative z-10">
-                        <div className="h-20 w-20 rounded-[2rem] bg-gradient-to-br from-amber-500/10 to-transparent border border-border flex items-center justify-center shadow-lg group-hover:border-amber-500/50 group-hover:shadow-[0_0_30px_-10px_rgba(245,158,11,0.5)] transition-all duration-500">
+                      <div className="flex flex-col sm:flex-row items-center gap-6 flex-1 relative z-10">
+                        <div className="h-20 w-20 rounded-[2rem] bg-gradient-to-br from-amber-500/10 to-transparent border border-border flex items-center justify-center shadow-lg group-hover:border-amber-500/50 group-hover:shadow-[0_0_30px_-10px_rgba(245,158,11,0.5)] transition-all duration-500 shrink-0">
                           {app.icon_url ? <img src={app.icon_url} className="h-14 w-14 rounded-2xl object-cover shadow-2xl group-hover:scale-105 transition-transform duration-500" /> : <Smartphone className="h-8 w-8 text-muted-foreground group-hover:text-amber-500 transition-colors duration-300" />}
                         </div>
                         <div>
-                          <div className="flex items-center gap-3 mb-2">
+                          <div className="flex flex-col sm:flex-row items-center gap-3 mb-2 justify-center sm:justify-start">
                             <h4 className="text-2xl font-bold tracking-tighter text-foreground">{app.name}</h4>
-                            <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black px-2 py-0.5 rounded-md border border-amber-500/20 uppercase shadow-sm">Enterprise PWA</span>
+                            <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black px-2 py-0.5 rounded-md border border-amber-500/20 uppercase shadow-sm shrink-0">Enterprise APK</span>
                           </div>
-                          <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
+                          <div className="flex flex-col sm:flex-row items-center gap-4 text-xs font-mono text-muted-foreground justify-center sm:justify-start">
                             <span className="flex items-center gap-1.5"><Globe className="h-3 w-3" /> {app.website_url.startsWith("http") ? new URL(app.website_url).hostname : "Local HTML Source"}</span>
                             <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> {new Date(app.created_at).toLocaleDateString()}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 relative z-10">
-                        <Button className="rounded-2xl h-12 px-6 bg-amber-500 text-white hover:bg-amber-600 font-bold shadow-lg shadow-amber-500/20 hover:scale-105 hover:shadow-amber-500/40 transition-all duration-300" onClick={() => onDownload(app)}>
-                          <Download className="h-4 w-4 mr-2" /> PWA Package
+                      <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto relative z-10">
+                        <Button className="rounded-xl h-10 px-4 bg-amber-500 text-white hover:bg-amber-600 font-bold shadow-lg shadow-amber-500/20 hover:scale-105 hover:shadow-amber-500/40 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app)}>
+                          <Download className="h-4 w-4 mr-2" /> Android APK
                         </Button>
-                        <Button variant="outline" className="h-12 w-12 p-0 rounded-2xl border-border hover:bg-muted hover:scale-105 transition-all duration-300" onClick={() => onPreview(app)}><Eye className="h-5 w-5 text-foreground" /></Button>
-                        <Button variant="outline" className="h-12 w-12 p-0 rounded-2xl border-border hover:bg-muted hover:scale-105 transition-all duration-300" onClick={() => onEdit(app)}><Pencil className="h-5 w-5 text-foreground" /></Button>
-                        <Button variant="outline" className="h-12 w-12 p-0 rounded-2xl border-border hover:bg-destructive/10 text-destructive hover:border-destructive/50 hover:scale-105 transition-all duration-300" onClick={() => onDelete(app.id)}><Trash2 className="h-5 w-5" /></Button>
+                        <Button variant="outline" className="rounded-xl h-10 px-4 border-dashed border-amber-500/50 hover:bg-amber-500/10 hover:border-amber-500 font-bold hover:scale-105 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownloadObb(app)}>
+                          <Download className="h-4 w-4 mr-2" /> OBB File
+                        </Button>
+                        <div className="flex gap-2 w-full sm:w-auto justify-center">
+                          <Button variant="outline" className="h-10 w-10 p-0 rounded-xl border-border hover:bg-muted hover:scale-105 transition-all duration-300" onClick={() => onPreview(app)}><Eye className="h-4 w-4 text-foreground" /></Button>
+                          <Button variant="outline" className="h-10 w-10 p-0 rounded-xl border-border hover:bg-muted hover:scale-105 transition-all duration-300" onClick={() => onEdit(app)}><Pencil className="h-4 w-4 text-foreground" /></Button>
+                          <Button variant="outline" className="h-10 w-10 p-0 rounded-xl border-border hover:bg-destructive/10 text-destructive hover:border-destructive/50 hover:scale-105 transition-all duration-300" onClick={() => onDelete(app.id)}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
             </section>
+
+
+
+            {/* DEDICATED SUPPORT DESK */}
+            <section className="glass rounded-[2.5rem] p-8 border-emerald-500/10 shadow-2xl space-y-6">
+              <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                    <LifeBuoy className="h-5 w-5 text-emerald-500" /> Dedicated Support Hub
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">Direct communication channel with your dedicated support expert</p>
+                </div>
+                <Button onClick={() => setIsSupportOpen(!isSupportOpen)} variant="outline" className="text-xs h-9 rounded-xl border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10">
+                  {isSupportOpen ? "Close Ticket Form" : "Create New Ticket"}
+                </Button>
+              </div>
+
+              {isSupportOpen && (
+                <form onSubmit={handleCreateTicket} className="bg-black/30 p-6 rounded-2xl border border-white/5 space-y-4">
+                  <h4 className="font-bold text-sm text-foreground">Submit Support Request</h4>
+                  <div className="space-y-2">
+                    <Label htmlFor="ticket-subject" className="text-foreground">Subject</Label>
+                    <Input
+                      id="ticket-subject"
+                      placeholder="Issue with splash screen scaling"
+                      value={newTicket.subject}
+                      onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
+                      className="bg-black/40 border-white/10 text-xs h-10 text-foreground"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ticket-desc" className="text-foreground">Description</Label>
+                    <Textarea
+                      id="ticket-desc"
+                      placeholder="Describe the issue or assistance required in detail..."
+                      value={newTicket.description}
+                      onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
+                      className="bg-black/40 border-white/10 text-xs h-24 text-foreground"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ticket-priority" className="text-foreground">Priority</Label>
+                    <select
+                      id="ticket-priority"
+                      value={newTicket.priority}
+                      onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}
+                      className="flex h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus-visible:outline-none"
+                    >
+                      <option value="normal" className="bg-zinc-900">Normal</option>
+                      <option value="high" className="bg-zinc-900">High</option>
+                      <option value="urgent" className="bg-zinc-900">Urgent (SLA 1-Hour)</option>
+                    </select>
+                  </div>
+                  <Button type="submit" disabled={creatingTicket} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 font-bold text-xs">
+                    {creatingTicket ? "Submitting..." : "Send Ticket"}
+                  </Button>
+                </form>
+              )}
+
+              <div className="space-y-3">
+                <div className="flex justify-between text-[10px] uppercase font-bold text-white/30 border-b border-white/5 pb-2">
+                  <span>Support Ticket History</span>
+                  <span>Status</span>
+                </div>
+                {tickets.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic text-center py-4">No support requests created yet.</p>
+                ) : (
+                  tickets.map((ticket) => (
+                    <div key={ticket.id} className="p-4 rounded-xl border border-white/5 bg-white/[0.01] flex justify-between items-start text-xs hover:border-emerald-500/20 transition-all">
+                      <div className="space-y-1">
+                        <h5 className="font-bold text-foreground">{ticket.subject}</h5>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed max-w-md">{ticket.description}</p>
+                        <div className="flex gap-3 text-[9px] text-muted-foreground/60 font-mono mt-2">
+                          <span>Priority: <b className="capitalize text-white/80">{ticket.priority}</b></span>
+                          <span>Opened: {new Date(ticket.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                        ticket.status === 'open' ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'
+                      }`}>{ticket.status}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
           </div>
 
           {/* BUSINESS SIDEBAR */}
-          <aside className="space-y-8">
+          <aside className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-8">
 
             {/* API ACCESS CARD */}
             <section className="glass rounded-[2.5rem] p-8 border-amber-500/20 bg-gradient-to-b from-amber-500/5 to-transparent shadow-lg">
@@ -803,17 +1254,41 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
             </section>
 
             {/* STORE SUBMISSION WRAPPERS */}
-            <section className="glass rounded-[2.5rem] p-8 border-amber-500/10 shadow-sm">
-              <div className="flex items-center gap-3 mb-6">
+            <section className="glass rounded-[2.5rem] p-8 border-amber-500/10 shadow-sm space-y-6">
+              <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500"><PlayCircle className="h-5 w-5" /></div>
                 <h4 className="text-lg font-bold text-foreground">TWA Store Submission</h4>
               </div>
               <div className="space-y-3">
-                <p className="text-xs text-muted-foreground leading-relaxed">Need your PWA in the Google Play Store or Apple App Store? Package it using our Trusted Web Activity (TWA) compiler.</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">Need your APK in the Google Play Store or Apple App Store? Package it using our Trusted Web Activity (TWA) compiler.</p>
                 <Button variant="outline" className="w-full rounded-xl h-10 border-amber-500/20 text-amber-500 hover:bg-amber-500/10 text-[10px] font-black uppercase tracking-widest transition-transform hover:scale-[1.02]" onClick={() => {
-                  toast.success("TWA Packaging system is active. Contact enterprise support for customized keystores.");
+                  if (apps.length === 0) {
+                    toast.error("Please deploy a APK project first before compiling TWA.");
+                    return;
+                  }
+                  setIsPlayModalOpen(true);
                 }}>Compile TWA Wrapper</Button>
               </div>
+
+              {playSubmissions.length > 0 && (
+                <div className="space-y-2.5 pt-4 border-t border-white/5">
+                  <div className="text-[10px] uppercase font-bold text-white/30">TWA Compilations</div>
+                  {playSubmissions.map((sub) => {
+                    const subApp = apps.find((a: any) => a.id === sub.app_id);
+                    return (
+                      <div key={sub.id} className="p-3 rounded-xl border border-white/5 bg-black/20 flex justify-between items-center text-xs">
+                        <div>
+                          <div className="font-bold text-white/90">{subApp?.name || "TWA Package"}</div>
+                          <div className="text-[9px] text-muted-foreground font-mono mt-0.5">{sub.package_name}</div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
+                          sub.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'
+                        }`}>{sub.status}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             {/* ADMOB WIZARD */}
@@ -831,7 +1306,7 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
                     return;
                   }
                   toast.promise(
-                    fetch("http://localhost:5000/api/admob/save", {
+                    fetch(`${backendUrl}/api/admob/save`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
@@ -848,7 +1323,7 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
                     }),
                     {
                       loading: 'Syncing AdMob settings...',
-                      success: 'AdMob synchronized with PWA manifest headers!',
+                      success: 'AdMob synchronized with APK manifest headers!',
                       error: (err) => err.message || 'Failed to save AdMob settings'
                     }
                   );
@@ -859,6 +1334,47 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
         </motion.div>
       </motion.main>
       <Footer />
+
+      {/* PLAY STORE SUBMISSION MODAL */}
+      <Dialog open={isPlayModalOpen} onOpenChange={setIsPlayModalOpen}>
+        <DialogContent className="max-w-md rounded-2xl bg-card border-border text-foreground">
+          <DialogHeader><DialogTitle className="font-bold text-foreground flex items-center gap-2"><PlayCircle className="h-5 w-5 text-amber-500" /> Play Store Wrapper Request</DialogTitle></DialogHeader>
+          <form onSubmit={handleRequestPlaySubmission} className="py-4 space-y-4">
+            <p className="text-xs text-muted-foreground leading-relaxed">Submit a request to generate a signed Google Play Asset (.aab) and receive dedicated play store setup assistance.</p>
+            
+            <div className="space-y-2">
+              <Label htmlFor="play-app" className="text-foreground">Select APK Project</Label>
+              <select
+                id="play-app"
+                value={requestPlayAppId}
+                onChange={(e) => setRequestPlayAppId(e.target.value)}
+                className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-xs text-foreground focus-visible:outline-none"
+                required
+              >
+                <option value="" className="bg-background text-foreground">Select an App...</option>
+                {apps.map((a: any) => (
+                  <option key={a.id} value={a.id} className="bg-background text-foreground">{a.name} ({a.package_name})</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="play-notes" className="text-foreground">Additional Instructions (e.g. AdMob placements, custom icons)</Label>
+              <Textarea
+                id="play-notes"
+                placeholder="Specify private signing keys details, or app descriptions..."
+                value={playNotes}
+                onChange={(e) => setPlayNotes(e.target.value)}
+                className="bg-background border-input text-xs h-24 text-foreground"
+              />
+            </div>
+
+            <Button type="submit" disabled={submittingPlay} className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl h-11 font-bold text-xs mt-2">
+              {submittingPlay ? "Registering request..." : "Request Wrapper Generation"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

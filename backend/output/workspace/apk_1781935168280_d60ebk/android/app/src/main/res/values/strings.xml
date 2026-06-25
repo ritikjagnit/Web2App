@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">My PWA App (via Stufflas)</string>
+    <string name="title_activity_main">My PWA App (via Stufflas)</string>
+    <string name="package_name">com.appweaver.mypwaappviastufflas_d60ebk</string>
+    <string name="custom_url_scheme">com.appweaver.mypwaappviastufflas_d60ebk</string>
+</resources>

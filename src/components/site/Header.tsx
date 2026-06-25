@@ -11,7 +11,7 @@ import { toast } from "sonner";
 const PRESET_AVATARS = [
   // Coder Hacker Cat (white cat, green glasses, black terminal background)
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231e1e2e'/><circle cx='50' cy='48' r='22' fill='%23cdd6f4'/><path d='M36 34 L32 20 L44 28 M64 34 L68 20 L56 28' fill='%23cdd6f4'/><rect x='32' y='42' width='14' height='10' rx='3' fill='none' stroke='%23a6e3a1' stroke-width='3'/><rect x='54' y='42' width='14' height='10' rx='3' fill='none' stroke='%23a6e3a1' stroke-width='3'/><path d='M46 47 L54 47' stroke='%23a6e3a1' stroke-width='3'/><path d='M46 56 Q50 60 54 56' fill='none' stroke='%23f38ba8' stroke-width='2.5'/></svg>",
-  
+
   // Caffeine Coder (blue mug, cute smile, programming steam, yellow background)
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23f9e2af'/><rect x='32' y='36' width='36' height='40' rx='8' fill='%2389b4fa'/><path d='M68 46 C76 46, 76 60, 68 60' fill='none' stroke='%2389b4fa' stroke-width='5'/><circle cx='44' cy='50' r='3.5' fill='%2311111b'/><circle cx='56' cy='50' r='3.5' fill='%2311111b'/><path d='M47 58 Q50 61 53 58' fill='none' stroke='%2311111b' stroke-width='2'/><path d='M40 24 Q44 16 48 24' fill='none' stroke='%23f38ba8' stroke-width='2.5'/><path d='M50 24 Q54 16 58 24' fill='none' stroke='%23f38ba8' stroke-width='2.5'/></svg>",
 
@@ -34,19 +34,19 @@ export function Header() {
   const [userId, setUserId] = useState<string | undefined>();
   const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(true);
-  
+
   // States for Profile Dropdown
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [email, setEmail] = useState<string | undefined>();
-  
+
   // States for Edit Profile Modal
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [tempName, setTempName] = useState("");
   const [tempAvatar, setTempAvatar] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
-  
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isAdmin = useIsAdmin(userId);
   const navigate = useNavigate();
@@ -112,8 +112,8 @@ export function Header() {
 
         if (data) {
           // If the test account is set to premium, reset it to 'free' to enable testing normal account flows
-          // Skip resetting for ritikjagnit@gmail.com so this account can test Pro and Business features
-          if (data.plan && data.plan !== 'free' && email !== 'ritikjagnit@gmail.com') {
+          // Skip resetting for ritikjagnit@gmail.com and jahanpatle01@gmail.com so these accounts can test Pro and Business features
+          if (data.plan && data.plan !== 'free' && email !== 'ritikjagnit@gmail.com' && email !== 'jahanpatle01@gmail.com') {
             await supabase.from("profiles").update({ plan: 'free' }).eq("id", userId);
           }
           if (data.avatar_url) {
@@ -222,10 +222,10 @@ export function Header() {
         <Link to="/" className="flex flex-col items-center justify-center group shrink-0">
           <img
             src="/logo.png"
-            alt="Stufflas Logo"
-            className="h-8 md:h-10 w-auto object-contain transition-transform group-hover:scale-105"
+            alt="AppOrbit Logo"
+            className="h-14 md:h-16 w-auto object-contain transition-transform group-hover:scale-105"
           />
-          <span className="text-[8px] md:text-[9px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5 text-center">website to pwa builder</span>
+          <span className="text-[8px] md:text-[9px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5 text-center"></span>
         </Link>
 
         {/* Desktop nav links */}
@@ -244,15 +244,11 @@ export function Header() {
 
         {/* Right side actions - aligned together on all viewports */}
         <div className="flex items-center gap-3">
-          {authed && isAdmin && (
-            <Button variant="ghost" asChild className="hidden sm:inline-flex">
-              <Link to="/admin">Admin</Link>
-            </Button>
-          )}
+
 
           {!authed && (
             <>
-              <Button variant="ghost" asChild className="hidden sm:inline-flex text-xs font-semibold">
+              <Button variant="ghost" asChild className="inline-flex text-xs font-semibold">
                 <Link to="/auth">Sign in</Link>
               </Button>
               <Button variant="hero" asChild className="hidden sm:inline-flex text-xs font-semibold">
@@ -299,10 +295,10 @@ export function Header() {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
                     transition={{ duration: 0.15, ease: "easeOut" }}
-                    className="absolute right-0 mt-2 w-56 rounded-2xl border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.6)] p-2.5 z-[60] origin-top-right overflow-hidden bg-[#0d0f1a]/92 backdrop-blur-2xl text-white"
+                    className="absolute right-0 mt-2 w-56 rounded-2xl border border-border/40 shadow-2xl p-2.5 z-[60] origin-top-right overflow-hidden bg-card/95 backdrop-blur-2xl text-foreground"
                   >
                     {/* User Profile Summary */}
-                    <div className="px-3 py-2.5 border-b border-white/5 mb-2 flex items-center gap-3">
+                    <div className="px-3 py-2.5 border-b border-border/40 mb-2 flex items-center gap-3">
                       <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 border border-primary/20 flex items-center justify-center text-sm font-black text-primary overflow-hidden shrink-0 font-mono">
                         {avatar ? (
                           <img src={avatar} className="w-full h-full object-cover" />
@@ -311,10 +307,10 @@ export function Header() {
                         )}
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-bold text-white truncate leading-tight">
+                        <span className="text-sm font-bold text-foreground truncate leading-tight">
                           {displayName || email?.split("@")[0] || "User"}
                         </span>
-                        <span className="text-[10px] text-white/40 truncate mt-0.5">
+                        <span className="text-[10px] text-muted-foreground truncate mt-0.5">
                           {email || "Logged in"}
                         </span>
                       </div>
@@ -324,13 +320,13 @@ export function Header() {
                     <div className="space-y-0.5">
                       <button
                         onClick={openEditProfileModal}
-                        className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg text-white/60 hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
+                        className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer"
                       >
                         <User className="h-3.5 w-3.5" />
                         Edit Profile
                       </button>
 
-                      <div className="h-px bg-white/5 my-1" />
+                      <div className="h-px bg-border/40 my-1" />
 
                       <button
                         onClick={async () => {
@@ -351,116 +347,17 @@ export function Header() {
             </div>
           )}
 
-          {/* Hamburger Menu trigger (aligned correctly next to avatar) */}
-          <button
-            className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors shrink-0 cursor-pointer"
-            onClick={() => setOpen(!open)}
-            aria-label="Toggle menu"
-          >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
         </div>
       </div>
-
-      {open && (
-        <div className="md:hidden glass border-t border-border/40 px-4 py-4 space-y-3">
-          {links.map((l) => (
-            <Link
-              key={l.to}
-              to={l.to}
-              onClick={() => setOpen(false)}
-              className="block text-sm text-muted-foreground hover:text-foreground"
-            >
-              {l.label}
-            </Link>
-          ))}
-          
-          {authed ? (
-            <div className="pt-2 border-t border-border/40 space-y-2.5">
-              <div className="flex items-center gap-2.5 px-2 py-1">
-                <div className="h-8 w-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-black text-primary overflow-hidden shrink-0">
-                  {avatar ? (
-                    <img src={avatar} className="w-full h-full object-cover" />
-                  ) : (
-                    fallbackLetter
-                  )}
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-bold text-foreground truncate">
-                    {displayName || email?.split("@")[0] || "User"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground truncate">
-                    {email || "Logged in"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <button
-                  onClick={openEditProfileModal}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground w-full text-left rounded-lg hover:bg-white/5 animate-none"
-                >
-                  <User className="h-4 w-4" /> Edit Profile
-                </button>
-
-                <button
-                  onClick={async () => {
-                    setOpen(false);
-                    await supabase.auth.signOut();
-                    navigate({ to: "/" });
-                    toast.success("Successfully logged out");
-                  }}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm text-red-400 hover:text-red-500 w-full text-left rounded-lg hover:bg-red-500/10 animate-none"
-                >
-                  <LogOut className="h-4 w-4" /> Logout
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="pt-2 border-t border-border/40 space-y-2">
-              <Link
-                to="/auth"
-                onClick={() => setOpen(false)}
-                className="block text-sm font-medium text-muted-foreground hover:text-foreground py-1"
-              >
-                Sign in
-              </Link>
-              <Link
-                to="/converter"
-                onClick={() => setOpen(false)}
-                className="block text-sm font-medium text-primary hover:text-primary/80 py-1"
-              >
-                Get Started
-              </Link>
-            </div>
-          )}
-
-          <div className="pt-2 border-t border-border/40">
-            <button
-              className="flex items-center gap-3 text-sm text-muted-foreground w-full py-2 cursor-pointer"
-              onClick={() => {
-                setIsDark(!isDark);
-                setOpen(false);
-              }}
-            >
-              {isDark ? (
-                <><Sun className="h-4 w-4" /> Light Mode</>
-              ) : (
-                <><Moon className="h-4 w-4" /> Dark Mode</>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Edit Profile Modal Dialog Overlay — Rendered outside the sticky blurred header using a React Portal */}
       {isEditProfileOpen && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0f1a]/95 backdrop-blur-3xl p-6 text-white shadow-2xl relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-full max-w-sm rounded-2xl border border-border/40 bg-card/95 backdrop-blur-3xl p-6 text-foreground shadow-2xl relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Top Close Button */}
-            <button 
+            <button
               onClick={() => setIsEditProfileOpen(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer"
+              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
@@ -471,12 +368,12 @@ export function Header() {
               {/* Profile Image Upload section */}
               <div className="flex flex-col items-center gap-2.5">
                 <label className="relative cursor-pointer group/upload block">
-                  <div className="h-20 w-20 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 border border-white/10 flex items-center justify-center text-2xl font-black shadow-lg overflow-hidden group-hover/upload:border-primary/50 transition-all duration-300">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handleAvatarChange} 
+                  <div className="h-20 w-20 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 border border-border/40 flex items-center justify-center text-2xl font-black shadow-lg overflow-hidden group-hover/upload:border-primary/50 transition-all duration-300">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
                     />
                     {tempAvatar ? (
                       <img src={tempAvatar} className="w-full h-full object-cover" alt="Temporary Avatar" />
@@ -484,12 +381,12 @@ export function Header() {
                       <span className="font-mono text-primary">{tempName.charAt(0).toUpperCase() || fallbackLetter}</span>
                     )}
                   </div>
-                  <div className="absolute -bottom-1 -right-1 h-7 w-7 bg-black/80 hover:bg-black rounded-full shadow-md flex items-center justify-center border border-white/10 transition-colors z-10">
-                    <Camera className="h-3.5 w-3.5 text-white/80" />
+                  <div className="absolute -bottom-1 -right-1 h-7 w-7 bg-background hover:bg-muted rounded-full shadow-md flex items-center justify-center border border-border/40 transition-colors z-10">
+                    <Camera className="h-3.5 w-3.5 text-foreground/80" />
                   </div>
                 </label>
                 <div className="flex items-center gap-2.5">
-                  <span className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Change Profile Photo</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Change Profile Photo</span>
                   {tempAvatar && (
                     <button
                       type="button"
@@ -504,8 +401,8 @@ export function Header() {
 
               {/* Preset Avatars Selector */}
               <div className="space-y-2">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-white/40">Or Select a Preset Avatar</label>
-                <div className="grid grid-cols-6 gap-2 bg-white/[0.02] border border-white/5 rounded-xl p-2.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Or Select a Preset Avatar</label>
+                <div className="grid grid-cols-6 gap-2 bg-foreground/[0.02] border border-border/40 rounded-xl p-2.5">
                   {PRESET_AVATARS.map((avatarUrl, idx) => {
                     const isSelected = tempAvatar === avatarUrl;
                     return (
@@ -513,11 +410,10 @@ export function Header() {
                         key={idx}
                         type="button"
                         onClick={() => setTempAvatar(avatarUrl)}
-                        className={`h-9 w-9 rounded-full overflow-hidden border transition-all cursor-pointer relative group ${
-                          isSelected 
-                            ? "border-primary ring-2 ring-primary/40 scale-105" 
-                            : "border-white/10 hover:border-white/30 hover:scale-105"
-                        }`}
+                        className={`h-9 w-9 rounded-full overflow-hidden border transition-all cursor-pointer relative group ${isSelected
+                            ? "border-primary ring-2 ring-primary/40 scale-105"
+                            : "border-border/40 hover:border-foreground/30 hover:scale-105"
+                          }`}
                       >
                         <img src={avatarUrl} className="w-full h-full object-cover" alt={`Preset ${idx + 1}`} />
                         {isSelected && (
@@ -533,12 +429,12 @@ export function Header() {
 
               {/* Username Input section */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-white/40">Username / Display Name</label>
-                <input 
-                  type="text" 
-                  value={tempName} 
-                  onChange={(e) => setTempName(e.target.value)} 
-                  className="w-full bg-[#181a27] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary/50 transition-colors"
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Username / Display Name</label>
+                <input
+                  type="text"
+                  value={tempName}
+                  onChange={(e) => setTempName(e.target.value)}
+                  className="w-full bg-background border border-border/40 rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
                   placeholder="Username"
                   required
                 />
@@ -546,16 +442,16 @@ export function Header() {
 
               {/* Buttons */}
               <div className="flex gap-2.5 pt-2">
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  className="flex-1 h-10 rounded-xl text-xs font-bold border border-white/5 text-white/60 hover:text-white hover:bg-white/5 cursor-pointer"
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="flex-1 h-10 rounded-xl text-xs font-bold border border-border/40 text-muted-foreground hover:text-foreground hover:bg-foreground/5 cursor-pointer"
                   onClick={() => setIsEditProfileOpen(false)}
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={savingProfile}
                   className="flex-1 h-10 rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-white cursor-pointer shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5"
                 >
