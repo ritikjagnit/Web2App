@@ -547,6 +547,59 @@ async function downloadAndProcessAssets(buildId, websiteUrl, htmlContent, output
     return { processedHtml, assetsList };
 }
 
+// Helper to trigger GitHub Actions Android build
+function triggerGitHubBuild(payload) {
+    return new Promise((resolve, reject) => {
+        const https = require('https');
+        const owner = process.env.GITHUB_OWNER;
+        const repo = process.env.GITHUB_REPO;
+        const token = process.env.GITHUB_PAT;
+
+        if (!owner || !repo || !token) {
+            reject(new Error("GitHub Actions credentials (GITHUB_OWNER, GITHUB_REPO, GITHUB_PAT) are not set in environment!"));
+            return;
+        }
+
+        const data = JSON.stringify({
+            event_type: 'build-android-app',
+            client_payload: payload
+        });
+
+        const options = {
+            hostname: 'api.github.com',
+            port: 443,
+            path: `/repos/${owner}/${repo}/dispatches`,
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github+json',
+                'User-Agent': 'NodeJS-App-Weaver',
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data)
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            if (res.statusCode === 204) {
+                resolve();
+            } else {
+                let body = '';
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => {
+                    reject(new Error(`GitHub Dispatch failed with status ${res.statusCode}: ${body}`));
+                });
+            }
+        });
+
+        req.on('error', (err) => {
+            reject(err);
+        });
+
+        req.write(data);
+        req.end();
+    });
+}
+
 // 5. Generate PWA Package (Asynchronous Build Task) - Modified to Build Android APK
 async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat }) {
     const pool = require('../db/database');
@@ -578,6 +631,36 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         } else {
             logMsg(buildId, "⚡ Priority build pipeline allocated.");
             logMsg(buildId, "⚡ Instant compiler thread activated (Pro/Business Plan).");
+        }
+
+        // Trigger GitHub Actions workflow if GITHUB config is set
+        if (process.env.GITHUB_PAT && process.env.GITHUB_OWNER && process.env.GITHUB_REPO) {
+            logMsg(buildId, "→ Offloading Android build to GitHub Actions runner...");
+            buildsStore[buildId].progress = 20;
+            buildsStore[buildId].step = 'Triggering GitHub Build';
+
+            const callbackUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/pwa/upload-build/${buildId}`;
+            
+            await triggerGitHubBuild({
+                buildId,
+                appName,
+                shortName,
+                themeColor,
+                backgroundColor,
+                sourceType,
+                htmlContent,
+                iconUrl,
+                cacheStrategy,
+                androidBuildFormat,
+                websiteUrl,
+                callbackUrl
+            });
+
+            logMsg(buildId, "✓ GitHub Actions build triggered successfully!");
+            logMsg(buildId, "Waiting for GitHub runner to compile APK...");
+            buildsStore[buildId].progress = 50;
+            buildsStore[buildId].step = 'Compiling on GitHub';
+            return; // Exit and wait for callback upload
         }
 
         // --- STEP 1: VALIDATING WEBSITE ---
@@ -911,5 +994,17 @@ exports.getBuildStatus = (buildId) => {
 // Get build logs
 exports.getBuildLogs = (buildId) => {
     return buildsStore[buildId] ? buildsStore[buildId].logs : null;
+};
+
+// Update build status externally (for GitHub Actions callback)
+exports.updateBuildStatus = (buildId, data) => {
+    if (buildsStore[buildId]) {
+        Object.assign(buildsStore[buildId], data);
+    }
+};
+
+// Log build message externally
+exports.logBuildMsg = (buildId, msg) => {
+    logMsg(buildId, msg);
 };
 

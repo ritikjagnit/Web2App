@@ -208,6 +208,84 @@ router.post('/api-build', async (req, res) => {
     }
 });
 
+// Setup multer for GitHub Action build upload
+const multer = require('multer');
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const fs = require('fs');
+        const path = require('path');
+        const { buildId } = req.params;
+        const uploadDir = path.resolve(__dirname, `../../builds/${buildId}`);
+        fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const ext = file.originalname.endsWith('.aab') ? '.aab' : '.apk';
+        cb(null, `app-release${ext}`);
+    }
+});
+const upload = multer({ storage: storage });
+
+// POST /api/pwa/upload-build/:buildId (GitHub Actions Callback)
+router.post('/upload-build/:buildId', upload.single('file'), async (req, res) => {
+    const { buildId } = req.params;
+    const { status, error } = req.body;
+    
+    const authHeader = req.headers['authorization'];
+    const expectedToken = `Bearer ${process.env.BUILD_CALLBACK_SECRET}`;
+    if (!process.env.BUILD_CALLBACK_SECRET || authHeader !== expectedToken) {
+        return res.status(401).json({ error: 'Unauthorized callback token' });
+    }
+
+    try {
+        if (status === 'success') {
+            if (!req.file) {
+                return res.status(400).json({ error: 'No build file uploaded' });
+            }
+
+            const path = require('path');
+            const finalPath = req.file.path;
+            const downloadUrl = `/api/pwa/download/${buildId}`;
+
+            // Update Database
+            await pool.query(
+                `UPDATE app_builds SET status = 'success', apk_url = $1 WHERE id = $2`,
+                [downloadUrl, buildId]
+            );
+
+            // Update in-memory state in pwaService
+            pwaService.updateBuildStatus(buildId, {
+                progress: 100,
+                step: 'Completed',
+                status: 'success',
+                packagePath: finalPath
+            });
+            pwaService.logBuildMsg(buildId, `✓ Package compiled and uploaded successfully from GitHub Actions!`);
+
+            console.log(`[SUCCESS] Build ${buildId} finished via GitHub Actions.`);
+            return res.json({ success: true, message: 'Build uploaded and state updated successfully' });
+        } else {
+            // Update database status to failed
+            await pool.query(
+                `UPDATE app_builds SET status = 'failed' WHERE id = $1`,
+                [buildId]
+            );
+
+            pwaService.updateBuildStatus(buildId, {
+                status: 'failed',
+                error: error || 'Compilation failed on GitHub runner'
+            });
+            pwaService.logBuildMsg(buildId, `❌ Compilation failed on GitHub runner: ${error || 'Unknown error'}`);
+
+            console.log(`[FAILED] Build ${buildId} failed via GitHub Actions:`, error);
+            return res.json({ success: true, message: 'Failure state updated' });
+        }
+    } catch (err) {
+        console.error(`Error in upload-build callback:`, err);
+        res.status(500).json({ error: 'Internal callback processing error', details: err.message });
+    }
+});
+
 // GET /api/pwa/build/status/:buildId
 router.get('/build/status/:buildId', (req, res) => {
     const build = pwaService.getBuildStatus(req.params.buildId);

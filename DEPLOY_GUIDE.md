@@ -48,3 +48,30 @@ Ab build generate karke upload karein:
    ```
 
 Aapki website refresh ho jayegi aur AI Chatbot work karne lagega!
+
+---
+
+## Step 4: GitHub Actions Setup (Free APK/AAB Compiler)
+Agar aap free hosting (jaise GoViralHost Node.js ya Render) use kar rahe hain aur paid VPS ke bina real APK build karna chahte hain, to niche diye gaye steps follow karein:
+
+1. **GitHub Repository Setup:**
+   * Apne project ko GitHub par push karein (Private repository bhi chalegi).
+   * Apne GitHub profile me **Personal Access Token (PAT)** generate karein (Settings > Developer Settings > Personal Access Tokens > Tokens (classic) > Generate new token). Isko `repo` permission dein.
+
+2. **GoViralHost Backend `.env` configure karein:**
+   Apne server par chal rahe `.env` file me ye values add karein:
+   ```env
+   GITHUB_PAT=ghp_your_github_personal_access_token
+   GITHUB_OWNER=your-github-username
+   GITHUB_REPO=your-repository-name
+   BACKEND_URL=https://your-goviralhost-domain.com
+   BUILD_CALLBACK_SECRET=any_random_secure_password_123
+   ```
+
+3. **GitHub Secrets configure karein:**
+   * GitHub me apne repository settings me jayein: `Settings > Secrets and variables > Actions > New repository secret`.
+   * Secret ka naam rakhein: `BUILD_CALLBACK_SECRET`
+   * Secret ki value me wahi password daalein jo aapne step 2 me `.env` file me daala tha.
+
+Ab jab bhi website se user build request bhejega, backend automatically GitHub actions runner par build trigger kar dega aur compile hone ke baad APK aapke GoViralHost server par safe save ho jayega.
+
