@@ -643,17 +643,19 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
             
             await triggerGitHubBuild({
                 buildId,
-                appName,
-                shortName,
-                themeColor,
-                backgroundColor,
-                sourceType,
-                htmlContent,
-                iconUrl,
-                cacheStrategy,
-                androidBuildFormat,
-                websiteUrl,
-                callbackUrl
+                config: {
+                    appName,
+                    shortName,
+                    themeColor,
+                    backgroundColor,
+                    sourceType,
+                    htmlContent,
+                    iconUrl,
+                    cacheStrategy,
+                    androidBuildFormat,
+                    websiteUrl,
+                    callbackUrl
+                }
             });
 
             logMsg(buildId, "✓ GitHub Actions build triggered successfully!");

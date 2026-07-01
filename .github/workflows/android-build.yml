@@ -34,16 +34,16 @@ jobs:
       - name: Configure Android App Workspace
         env:
           BUILD_ID: ${{ github.event.client_payload.buildId }}
-          APP_NAME: ${{ github.event.client_payload.appName }}
-          SHORT_NAME: ${{ github.event.client_payload.shortName }}
-          THEME_COLOR: ${{ github.event.client_payload.themeColor }}
-          BACKGROUND_COLOR: ${{ github.event.client_payload.backgroundColor }}
-          SOURCE_TYPE: ${{ github.event.client_payload.sourceType }}
-          HTML_CONTENT: ${{ github.event.client_payload.htmlContent }}
-          ICON_URL: ${{ github.event.client_payload.iconUrl }}
-          CACHE_STRATEGY: ${{ github.event.client_payload.cacheStrategy }}
-          ANDROID_BUILD_FORMAT: ${{ github.event.client_payload.androidBuildFormat }}
-          WEBSITE_URL: ${{ github.event.client_payload.websiteUrl }}
+          APP_NAME: ${{ github.event.client_payload.config.appName }}
+          SHORT_NAME: ${{ github.event.client_payload.config.shortName }}
+          THEME_COLOR: ${{ github.event.client_payload.config.themeColor }}
+          BACKGROUND_COLOR: ${{ github.event.client_payload.config.backgroundColor }}
+          SOURCE_TYPE: ${{ github.event.client_payload.config.sourceType }}
+          HTML_CONTENT: ${{ github.event.client_payload.config.htmlContent }}
+          ICON_URL: ${{ github.event.client_payload.config.iconUrl }}
+          CACHE_STRATEGY: ${{ github.event.client_payload.config.cacheStrategy }}
+          ANDROID_BUILD_FORMAT: ${{ github.event.client_payload.config.androidBuildFormat }}
+          WEBSITE_URL: ${{ github.event.client_payload.config.websiteUrl }}
         run: |
           node backend/scripts/github-build-helper.js
 
@@ -51,7 +51,7 @@ jobs:
         run: |
           cd output/workspace/${{ github.event.client_payload.buildId }}/android
           chmod +x gradlew
-          if [ "${{ github.event.client_payload.androidBuildFormat }}" = "aab" ]; then
+          if [ "${{ github.event.client_payload.config.androidBuildFormat }}" = "aab" ]; then
             ./gradlew bundleDebug
           else
             ./gradlew assembleDebug
@@ -60,8 +60,8 @@ jobs:
       - name: Upload Package back to GoViralHost
         env:
           BUILD_ID: ${{ github.event.client_payload.buildId }}
-          ANDROID_BUILD_FORMAT: ${{ github.event.client_payload.androidBuildFormat }}
-          CALLBACK_URL: ${{ github.event.client_payload.callbackUrl }}
+          ANDROID_BUILD_FORMAT: ${{ github.event.client_payload.config.androidBuildFormat }}
+          CALLBACK_URL: ${{ github.event.client_payload.config.callbackUrl }}
           CALLBACK_SECRET: ${{ secrets.BUILD_CALLBACK_SECRET }}
         run: |
           BUILD_DIR="output/workspace/${BUILD_ID}"
