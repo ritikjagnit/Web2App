@@ -136,6 +136,10 @@ async function run() {
         const resDir = path.join(workspaceDir, 'android/app/src/main/res');
         await generateAndroidIcons(iconUrl, appName, themeColor, resDir);
 
+        // Install Capacitor dependencies in the workspace
+        console.log("Installing Capacitor CLI and platform libraries in workspace...");
+        execSync('npm install', { cwd: workspaceDir, stdio: 'inherit' });
+
         // Run Capacitor Sync
         console.log("Syncing web assets into Android project shell...");
         execSync('npx cap sync android', { cwd: workspaceDir, stdio: 'inherit' });
