@@ -28,7 +28,6 @@ jobs:
 
       - name: Install Node Dependencies
         run: |
-          npm install
           cd backend && npm install
 
       - name: Configure Android App Workspace
