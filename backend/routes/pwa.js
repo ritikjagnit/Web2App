@@ -107,8 +107,8 @@ router.post('/build', async (req, res) => {
         try {
             const buildsResult = await pool.query('SELECT COUNT(*) as count FROM app_builds WHERE user_id = $1', [user_id]);
             const count = parseInt(buildsResult.rows[0]?.count || '0');
-            if (count >= 1) {
-                return res.status(403).json({ error: 'Free Plan limit exceeded: Maximum 1 app allowed on the free plan.' });
+            if (count >= 10) {
+                return res.status(403).json({ error: 'Free Plan limit exceeded: Maximum 10 apps allowed on the free plan.' });
             }
         } catch (dbErr) {
             console.error('Error checking limits on build:', dbErr);
