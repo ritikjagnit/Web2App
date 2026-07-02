@@ -64,16 +64,20 @@ router.post('/readiness', async (req, res) => {
 router.get('/check-limits/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const profileResult = await pool.query('SELECT plan FROM profiles WHERE id = $1', [userId]);
+        const profileResult = await pool.query('SELECT plan, email FROM profiles WHERE id = $1', [userId]);
         const plan = profileResult.rows[0]?.plan || 'free';
+        const email = profileResult.rows[0]?.email || '';
 
         const buildsResult = await pool.query('SELECT COUNT(*) as count FROM app_builds WHERE user_id = $1', [userId]);
         const count = parseInt(buildsResult.rows[0]?.count || '0');
 
+        // Bypass limit check for admin developer
+        const isBypass = email === 'ritikjagnit@gmail.com';
+
         res.json({
             plan,
             count,
-            allowed: plan !== 'free' || count < 1
+            allowed: plan !== 'free' || isBypass || count < 1
         });
     } catch (err) {
         console.error('Error checking limits:', err);
@@ -102,17 +106,27 @@ router.post('/build', async (req, res) => {
         return res.status(400).json({ error: 'website_url is required when sourceType is not html' });
     }
 
-    const activePlan = plan || 'free';
-    if (activePlan === 'free' && user_id) {
-        try {
+    try {
+        let activePlan = plan || 'free';
+        let email = '';
+        if (user_id) {
+            const profileResult = await pool.query('SELECT plan, email FROM profiles WHERE id = $1', [user_id]);
+            if (profileResult.rows.length > 0) {
+                activePlan = profileResult.rows[0].plan || activePlan;
+                email = profileResult.rows[0].email || '';
+            }
+        }
+
+        const isBypass = email === 'ritikjagnit@gmail.com';
+        if (activePlan === 'free' && user_id && !isBypass) {
             const buildsResult = await pool.query('SELECT COUNT(*) as count FROM app_builds WHERE user_id = $1', [user_id]);
             const count = parseInt(buildsResult.rows[0]?.count || '0');
             if (count >= 10) {
                 return res.status(403).json({ error: 'Free Plan limit exceeded: Maximum 10 apps allowed on the free plan.' });
             }
-        } catch (dbErr) {
-            console.error('Error checking limits on build:', dbErr);
         }
+    } catch (dbErr) {
+        console.error('Error checking limits on build:', dbErr);
     }
 
     try {

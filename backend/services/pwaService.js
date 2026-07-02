@@ -633,8 +633,9 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
             logMsg(buildId, "⚡ Instant compiler thread activated (Pro/Business Plan).");
         }
 
-        // Trigger GitHub Actions workflow if GITHUB config is set
-        if (process.env.GITHUB_PAT && process.env.GITHUB_OWNER && process.env.GITHUB_REPO) {
+        // Trigger GitHub Actions workflow if GITHUB config is set and USE_GITHUB_BUILD is enabled
+        const useGitHub = process.env.USE_GITHUB_BUILD === 'true' && process.env.GITHUB_PAT && process.env.GITHUB_OWNER && process.env.GITHUB_REPO;
+        if (useGitHub) {
             logMsg(buildId, "→ Offloading Android build to GitHub Actions runner...");
             buildsStore[buildId].progress = 20;
             buildsStore[buildId].step = 'Triggering GitHub Build';
