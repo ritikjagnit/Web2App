@@ -776,6 +776,12 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         let buildGradle = fs.readFileSync(buildGradlePath, 'utf8');
         buildGradle = buildGradle.replace(/namespace\s+['"][^'"]+['"]/g, `namespace "${packageName}"`);
         buildGradle = buildGradle.replace(/applicationId\s+['"][^'"]+['"]/g, `applicationId "${packageName}"`);
+        
+        // Generate a dynamic version code to ensure each build is considered an update by Android
+        const timestampSeconds = Math.floor(Date.now() / 1000);
+        buildGradle = buildGradle.replace(/versionCode\s+\d+/g, `versionCode ${timestampSeconds}`);
+        buildGradle = buildGradle.replace(/versionName\s+['"][^'"]+['"]/g, `versionName "1.0.${timestampSeconds}"`);
+        
         fs.writeFileSync(buildGradlePath, buildGradle, 'utf8');
 
         // Move and update MainActivity.java package name to match the new packageName/namespace
