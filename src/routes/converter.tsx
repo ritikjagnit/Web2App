@@ -96,7 +96,7 @@ function ConverterPage() {
     
     checkLimits();
   }, []);
-  const [websiteUrl, setWebsiteUrl] = useState(url || "https://en.wikipedia.org/wiki/Mobile_app");
+  const [websiteUrl, setWebsiteUrl] = useState(url || "https://stufflas.com/");
   const [appName, setAppName] = useState("My Awesome App");
   const [shortName, setShortName] = useState("Awesome APK");
   const [themeColor, setThemeColor] = useState("#7c3aed");
@@ -748,40 +748,23 @@ function ConverterPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Target Platform</Label>
-                      <div className="flex gap-2">
-                        {[
-                          { id: "both", label: "Both" },
-                          { id: "android", label: "Android" },
-                          { id: "ios", label: "iOS" }
-                        ].map((p) => (
-                          <button 
-                            key={p.id} 
-                            type="button" 
-                            onClick={() => setTargetPlatform(p.id as any)} 
-                            className={`flex-1 flex items-center justify-center gap-1 h-10 rounded-lg border ${targetPlatform === p.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-[11px] font-medium`}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Navigation Preview Style</Label>
-                      <div className="flex gap-3">
-                        {["top", "bottom"].map((s) => (
-                          <button 
-                            key={s} 
-                            type="button" 
-                            onClick={() => setNavStyle(s as any)} 
-                            className={`flex-1 flex items-center justify-center gap-2 h-10 rounded-lg border ${navStyle === s ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-xs font-medium capitalize`}
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
+                  <div className="space-y-2">
+                    <Label>Target Platform</Label>
+                    <div className="flex gap-2">
+                      {[
+                        { id: "both", label: "Both" },
+                        { id: "android", label: "Android" },
+                        { id: "ios", label: "iOS" }
+                      ].map((p) => (
+                        <button 
+                          key={p.id} 
+                          type="button" 
+                          onClick={() => setTargetPlatform(p.id as any)} 
+                          className={`flex-1 flex items-center justify-center gap-1 h-10 rounded-lg border ${targetPlatform === p.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-[11px] font-medium`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 

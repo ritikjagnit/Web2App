@@ -1,4 +1,4 @@
-const fetch = require('node-fetch'); // Wait, node-fetch might not be installed, but we can use native fetch since we are on Node 22!
+// Using global fetch instead of node-fetch // Wait, node-fetch might not be installed, but we can use native fetch since we are on Node 22!
 
 async function runTest() {
     console.log("Triggering test build via backend server on port 5001...");

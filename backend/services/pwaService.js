@@ -892,18 +892,30 @@ async function generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDi
     let baseImage;
 
     if (iconUrl) {
-        logMsg(buildId, `Downloading icon from: ${iconUrl}`);
-        const tempIconPath = path.join(__dirname, `../output/temp_icon_${buildId}.png`);
-        const outputDir = path.dirname(tempIconPath);
-        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-
         try {
-            await downloadFile(iconUrl, tempIconPath);
-            baseImage = await Jimp.read(tempIconPath);
-            logMsg(buildId, "Icon downloaded successfully for Android app.");
-            fs.unlinkSync(tempIconPath);
+            if (iconUrl.startsWith('data:')) {
+                logMsg(buildId, "Decoding icon from base64 data URI...");
+                const commaIdx = iconUrl.indexOf(',');
+                if (commaIdx !== -1) {
+                    const base64Data = iconUrl.substring(commaIdx + 1);
+                    const buffer = Buffer.from(base64Data, 'base64');
+                    baseImage = await Jimp.read(buffer);
+                    logMsg(buildId, "Icon decoded successfully from base64 data URI.");
+                } else {
+                    throw new Error("Invalid data URI format");
+                }
+            } else {
+                logMsg(buildId, `Downloading icon from: ${iconUrl}`);
+                const tempIconPath = path.join(__dirname, `../output/temp_icon_${buildId}.png`);
+                const outputDir = path.dirname(tempIconPath);
+                if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+                await downloadFile(iconUrl, tempIconPath);
+                baseImage = await Jimp.read(tempIconPath);
+                logMsg(buildId, "Icon downloaded successfully for Android app.");
+                fs.unlinkSync(tempIconPath);
+            }
         } catch (downloadErr) {
-            logMsg(buildId, `Failed to download icon: ${downloadErr.message}. Falling back to default generated icon.`);
+            logMsg(buildId, `Failed to process icon: ${downloadErr.message}. Falling back to default generated icon.`);
         }
     }
 

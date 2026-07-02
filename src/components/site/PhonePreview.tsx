@@ -176,7 +176,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
                   key={iframeKey}
                   ref={iframeRef}
                   src={url}
-                  className="w-[calc(100%+24px)] h-[calc(100%+24px)] border-0 pointer-events-auto"
+                  className="w-full h-full border-0 pointer-events-auto"
                   title="webview-preview"
                   onLoad={handleIframeLoad}
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"

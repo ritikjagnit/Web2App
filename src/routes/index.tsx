@@ -131,7 +131,7 @@ function HomePage() {
             </div>
           </motion.div>
 
-          <PhonePreview url="https://en.wikipedia.org/wiki/Mobile_app" appName="Demo App" themeColor="#7c3aed" />
+          <PhonePreview url="https://stufflas.com/" appName="Demo App" themeColor="#7c3aed" />
         </div>
       </section>
 
