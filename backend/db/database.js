@@ -41,7 +41,13 @@ const initSqlite = () => {
                             apk_url TEXT,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
-                    `);
+                    `, () => {
+                        sqliteDb.run(`
+                            ALTER TABLE app_builds ADD COLUMN file_data BLOB
+                        `, (err) => {
+                            // Ignore if column already exists
+                        });
+                    });
 
                     sqliteDb.run(`
                         CREATE TABLE IF NOT EXISTS profiles (
@@ -93,6 +99,10 @@ const initDb = async () => {
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            
+            await client.query(`
+                ALTER TABLE app_builds ADD COLUMN IF NOT EXISTS file_data BYTEA;
+            `);
 
             await client.query(`
                 CREATE TABLE IF NOT EXISTS profiles (
@@ -116,11 +126,12 @@ const initDb = async () => {
     await initSqlite();
 };
 
-initDb();
+const dbInitPromise = initDb();
 
 // Export a unified query interface that mimics the pg pool interface
 module.exports = {
     query: async (sql, params = []) => {
+        await dbInitPromise;
         if (!useSqlite && pool) {
             try {
                 return await pool.query(sql, params);
@@ -130,8 +141,11 @@ module.exports = {
                     err.code === 'ECONNREFUSED' || 
                     err.code === 'ENETUNREACH' ||
                     err.code === 'EPIPE' ||
+                    err.code === 'ENOTFOUND' ||
+                    err.code === 'EAI_AGAIN' ||
                     err.message.includes('timeout') ||
-                    err.message.includes('connection');
+                    err.message.includes('connection') ||
+                    err.message.includes('ENOTFOUND');
 
                 if (isNetworkError) {
                     console.warn('Postgres connection failed during query. Falling back to local SQLite dynamically...', err.message);

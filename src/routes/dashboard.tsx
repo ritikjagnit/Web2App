@@ -83,7 +83,10 @@ const MOCK_CHART_DATA = [
   { name: "Sun", builds: 10 },
 ];
 
-const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com");
+let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
+if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
+  backendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com";
+}
 
 function DashboardPage() {
   const session = useAuthGuard();
@@ -308,7 +311,8 @@ function DashboardPage() {
     if (!app.apk_url) return;
     try {
       toast.info("Downloading Android APK...");
-      const response = await fetch(app.apk_url);
+      const fullUrl = app.apk_url.startsWith('/') ? `${backendUrl}${app.apk_url}` : app.apk_url;
+      const response = await fetch(fullUrl);
       const blob = await response.blob();
 
       const apkBlob = new Blob([blob], { type: "application/vnd.android.package-archive" });
@@ -323,7 +327,8 @@ function DashboardPage() {
       window.URL.revokeObjectURL(url);
       toast.success("Download started");
     } catch (error) {
-      window.open(app.apk_url, "_blank");
+      const fullUrl = app.apk_url.startsWith('/') ? `${backendUrl}${app.apk_url}` : app.apk_url;
+      window.open(fullUrl, "_blank");
     }
   };
 

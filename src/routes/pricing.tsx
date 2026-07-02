@@ -126,7 +126,10 @@ function PricingPage() {
     });
   };
 
-  const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com");
+  let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
+  if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
+    backendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com";
+  }
 
   const updatePlan = async (planName: string, userId: string) => {
     setLoadingPlan(planName);

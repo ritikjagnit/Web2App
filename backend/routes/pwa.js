@@ -258,13 +258,22 @@ router.post('/upload-build/:buildId', upload.single('file'), async (req, res) =>
             }
 
             const path = require('path');
+            const fs = require('fs');
             const finalPath = req.file.path;
             const downloadUrl = `/api/pwa/download/${buildId}`;
 
-            // Update Database
+            // Read the binary file into a buffer
+            let fileBuffer = null;
+            try {
+                fileBuffer = fs.readFileSync(finalPath);
+            } catch (fsErr) {
+                console.error(`Failed to read uploaded build file for DB storage:`, fsErr);
+            }
+
+            // Update Database with file data
             await pool.query(
-                `UPDATE app_builds SET status = 'success', apk_url = $1 WHERE id = $2`,
-                [downloadUrl, buildId]
+                `UPDATE app_builds SET status = 'success', apk_url = $1, file_data = $2 WHERE id = $3`,
+                [downloadUrl, fileBuffer, buildId]
             );
 
             // Update in-memory state in pwaService
@@ -349,7 +358,7 @@ router.get('/build/logs/:buildId', (req, res) => {
 });
 
 // GET /api/pwa/download/:buildId
-router.get('/download/:buildId', (req, res) => {
+router.get('/download/:buildId', async (req, res) => {
     const buildId = req.params.buildId;
     const fs = require('fs');
     const path = require('path');
@@ -360,6 +369,29 @@ router.get('/download/:buildId', (req, res) => {
     if (!fs.existsSync(packagePath)) {
         packagePath = path.resolve(__dirname, `../../builds/${buildId}/app-release.aab`);
         extension = '.aab';
+    }
+    
+    // If not found on disk, try to restore from database storage
+    if (!fs.existsSync(packagePath)) {
+        try {
+            const dbRes = await pool.query(
+                'SELECT file_data FROM app_builds WHERE id = $1',
+                [buildId]
+            );
+            if (dbRes.rows.length > 0 && dbRes.rows[0].file_data) {
+                // Ensure directory exists
+                const dir = path.dirname(packagePath);
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+                
+                // Write buffer back to disk cache
+                fs.writeFileSync(packagePath, dbRes.rows[0].file_data);
+                console.log(`[RESTORED] Restored build ${buildId} from database to disk cache.`);
+            }
+        } catch (dbErr) {
+            console.error(`Failed to restore build ${buildId} from database:`, dbErr);
+        }
     }
     
     if (!fs.existsSync(packagePath)) {

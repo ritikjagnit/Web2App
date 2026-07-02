@@ -605,11 +605,26 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
     const pool = require('../db/database');
     const updateDbStatus = async (status, packageUrl = null) => {
         try {
+            let fileBuffer = null;
+            if (status === 'success') {
+                try {
+                    const fs = require('fs');
+                    if (typeof finalPackagePath !== 'undefined' && fs.existsSync(finalPackagePath)) {
+                        fileBuffer = fs.readFileSync(finalPackagePath);
+                    }
+                } catch (fsErr) {
+                    console.error('Failed to read package for db storage:', fsErr);
+                }
+            }
+
             await pool.query(
-                `INSERT INTO app_builds (id, user_id, website_url, status, apk_url)
-                 VALUES ($1, $2, $3, $4, $5)
-                 ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, apk_url = COALESCE(EXCLUDED.apk_url, app_builds.apk_url)`,
-                [buildId, userId || 'guest', websiteUrl || 'local-html', status, packageUrl]
+                `INSERT INTO app_builds (id, user_id, website_url, status, apk_url, file_data)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 ON CONFLICT (id) DO UPDATE SET 
+                    status = EXCLUDED.status, 
+                    apk_url = COALESCE(EXCLUDED.apk_url, app_builds.apk_url),
+                    file_data = COALESCE(EXCLUDED.file_data, app_builds.file_data)`,
+                [buildId, userId || 'guest', websiteUrl || 'local-html', status, packageUrl, fileBuffer]
             );
         } catch (e) {
             console.error('Failed to update Postgres build status:', e);

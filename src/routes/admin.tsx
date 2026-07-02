@@ -47,6 +47,11 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
+let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
+if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
+  backendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com";
+}
+
 function AdminPage() {
   const session = useAuthGuard();
   const isAdmin = useIsAdmin(session?.user.id);
@@ -330,7 +335,10 @@ function AdminPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => window.open(a.apk_url, '_blank')}>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => {
+                            const fullUrl = a.apk_url ? (a.apk_url.startsWith('/') ? `${backendUrl}${a.apk_url}` : a.apk_url) : '';
+                            if (fullUrl) window.open(fullUrl, '_blank');
+                          }}>
                             <Database className="h-3.5 w-3.5" />
                           </Button>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => deleteApp(a.id)}>
