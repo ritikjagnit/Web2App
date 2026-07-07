@@ -155,18 +155,30 @@ async function generateAndroidIcons(iconUrl, appName, themeColor, resDir) {
     let baseImage;
 
     if (iconUrl) {
-        console.log(`Downloading icon from: ${iconUrl}`);
+        console.log(`Processing icon: ${iconUrl.substring(0, 50)}...`);
         const tempIconPath = path.join(projectRootDir, `output/temp_icon_${buildId}.png`);
         const outputDir = path.dirname(tempIconPath);
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
         try {
-            await downloadFile(iconUrl, tempIconPath);
-            baseImage = await Jimp.read(tempIconPath);
-            console.log("Icon downloaded successfully for Android app.");
-            fs.unlinkSync(tempIconPath);
+            if (iconUrl.startsWith('data:') && iconUrl.includes(';base64,')) {
+                const matches = iconUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+                let buffer;
+                if (matches && matches.length === 3) {
+                    buffer = Buffer.from(matches[2], 'base64');
+                } else {
+                    buffer = Buffer.from(iconUrl, 'base64');
+                }
+                baseImage = await Jimp.read(buffer);
+                console.log("Icon decoded successfully from Base64.");
+            } else {
+                await downloadFile(iconUrl, tempIconPath);
+                baseImage = await Jimp.read(tempIconPath);
+                console.log("Icon downloaded successfully for Android app.");
+                fs.unlinkSync(tempIconPath);
+            }
         } catch (downloadErr) {
-            console.warn(`Failed to download icon: ${downloadErr.message}. Falling back to default generated icon.`);
+            console.warn(`Failed to process icon: ${downloadErr.message}. Falling back to default generated icon.`);
         }
     }
 
