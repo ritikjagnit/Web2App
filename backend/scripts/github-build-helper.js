@@ -113,12 +113,6 @@ async function run() {
         let buildGradle = fs.readFileSync(buildGradlePath, 'utf8');
         buildGradle = buildGradle.replace(/namespace\s+['"][^'"]+['"]/g, `namespace "${packageName}"`);
         buildGradle = buildGradle.replace(/applicationId\s+['"][^'"]+['"]/g, `applicationId "${packageName}"`);
-        
-        // Generate a dynamic version code to ensure each build is considered an update by Android
-        const timestampSeconds = Math.floor(Date.now() / 1000);
-        buildGradle = buildGradle.replace(/versionCode\s+\d+/g, `versionCode ${timestampSeconds}`);
-        buildGradle = buildGradle.replace(/versionName\s+['"][^'"]+['"]/g, `versionName "1.0.${timestampSeconds}"`);
-        
         fs.writeFileSync(buildGradlePath, buildGradle, 'utf8');
 
         // Move MainActivity.java
@@ -161,30 +155,18 @@ async function generateAndroidIcons(iconUrl, appName, themeColor, resDir) {
     let baseImage;
 
     if (iconUrl) {
+        console.log(`Downloading icon from: ${iconUrl}`);
+        const tempIconPath = path.join(projectRootDir, `output/temp_icon_${buildId}.png`);
+        const outputDir = path.dirname(tempIconPath);
+        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
         try {
-            if (iconUrl.startsWith('data:')) {
-                console.log("Decoding icon from base64 data URI...");
-                const commaIdx = iconUrl.indexOf(',');
-                if (commaIdx !== -1) {
-                    const base64Data = iconUrl.substring(commaIdx + 1);
-                    const buffer = Buffer.from(base64Data, 'base64');
-                    baseImage = await Jimp.read(buffer);
-                    console.log("Icon decoded successfully from base64 data URI.");
-                } else {
-                    throw new Error("Invalid data URI format");
-                }
-            } else {
-                console.log(`Downloading icon from: ${iconUrl}`);
-                const tempIconPath = path.join(projectRootDir, `output/temp_icon_${buildId}.png`);
-                const outputDir = path.dirname(tempIconPath);
-                if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-                await downloadFile(iconUrl, tempIconPath);
-                baseImage = await Jimp.read(tempIconPath);
-                console.log("Icon downloaded successfully for Android app.");
-                fs.unlinkSync(tempIconPath);
-            }
+            await downloadFile(iconUrl, tempIconPath);
+            baseImage = await Jimp.read(tempIconPath);
+            console.log("Icon downloaded successfully for Android app.");
+            fs.unlinkSync(tempIconPath);
         } catch (downloadErr) {
-            console.warn(`Failed to process icon: ${downloadErr.message}. Falling back to default generated icon.`);
+            console.warn(`Failed to download icon: ${downloadErr.message}. Falling back to default generated icon.`);
         }
     }
 

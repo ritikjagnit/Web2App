@@ -44,7 +44,7 @@ export default defineConfig({
         "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
       },
       watch: {
-        ignored: ['**/backend/**']
+        ignored: ['**/backend/**', '**/output/**', '**/builds/**', '**/local_fallback.db*']
       }
     },
   },

@@ -22,21 +22,22 @@ interface Props {
   appName?: string;
   themeColor?: string;
   iconUrl?: string;
-  navStyle?: "top" | "bottom";
+
   hasSubscription?: boolean;
   deviceMode?: "android" | "ios";
+  includeBottomNav?: boolean;
 }
 
 type Tab = "home" | "search" | "alerts" | "profile";
 
-export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed", iconUrl, navStyle = "bottom", hasSubscription = false, deviceMode = "android" }: Props) {
+export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed", iconUrl, hasSubscription = false, deviceMode = "android", includeBottomNav = false }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [isLoading, setIsLoading] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const [showSplash, setShowSplash] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
-  const showNav = hasSubscription;
+  const showNav = includeBottomNav || hasSubscription;
 
   // Trigger splash animation when URL changes
   useEffect(() => {
@@ -164,11 +165,9 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
       case "home":
         return (
           <div className={`absolute inset-0 ${
-            showNav && navStyle === "bottom" 
-              ? "bottom-[65px] top-[40px]" 
-              : showNav && navStyle === "top" 
-                ? "top-[90px] bottom-0" 
-                : "top-[40px] bottom-0"
+            showNav 
+              ? "bottom-[65px] top-0" 
+              : "top-0 bottom-0"
           } overflow-hidden bg-white`}>
             {url ? (
               <div className="absolute inset-0 bg-white overflow-hidden">
@@ -202,7 +201,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
         );
       case "search":
         return (
-          <div className={`p-5 space-y-5 bg-white h-full ${showNav && navStyle === "top" ? "pt-[155px]" : "pt-[105px]"}`}>
+          <div className={`p-5 space-y-5 bg-white h-full pt-[105px]`}>
             <div className="relative">
               <div className="absolute inset-y-0 left-3.5 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-zinc-400" />
@@ -226,7 +225,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
         );
       case "alerts":
         return (
-          <div className={`p-5 space-y-4 bg-white h-full ${showNav && navStyle === "top" ? "pt-[155px]" : "pt-[105px]"}`}>
+          <div className={`p-5 space-y-4 bg-white h-full pt-[105px]`}>
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
               <h2 className="text-sm font-extrabold text-zinc-800 uppercase tracking-wider">Notifications</h2>
               <span className="h-2 w-2 rounded-full bg-primary animate-ping" />
@@ -246,7 +245,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
         );
       case "profile":
         return (
-          <div className={`flex flex-col items-center p-6 space-y-5 bg-white h-full ${showNav && navStyle === "top" ? "pt-[155px]" : "pt-[105px]"}`}>
+          <div className={`flex flex-col items-center p-6 space-y-5 bg-white h-full pt-[105px]`}>
             <div className="h-20 w-20 rounded-3xl bg-zinc-100 border-4 border-white shadow-xl flex items-center justify-center overflow-hidden">
               {iconUrl ? (
                 <img src={iconUrl} alt="App Logo" className="h-full w-full object-cover" />
@@ -339,31 +338,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
 
 
 
-          {/* Converted Tab Nav (Top Navigation Style) */}
-          {showNav && navStyle === "top" && (
-            <div className="absolute top-[40px] left-0 right-0 h-[50px] bg-white border-b border-zinc-100 flex items-center justify-around px-4 shadow-sm z-30">
-              {navItems.map((item) => {
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id as Tab)}
-                    className="flex flex-col items-center gap-0.5 outline-none relative py-1 cursor-pointer"
-                  >
-                    <item.icon className="h-4 w-4 transition-colors" style={{ color: isActive ? themeColor : "#a1a1aa" }} />
-                    <span className="text-[8px] font-extrabold uppercase tracking-wide transition-colors" style={{ color: isActive ? themeColor : "#a1a1aa" }}>{item.label}</span>
-                    {isActive && (
-                      <motion.div 
-                        layoutId="activeTabIndicatorTop" 
-                        className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-full" 
-                        style={{ backgroundColor: themeColor }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+
 
           {/* Screen Content Wrapper */}
           <div className="flex-1 bg-white relative overflow-hidden select-none">
@@ -445,7 +420,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
 
 
             {/* Custom Tab Navigation Bar (Bottom Style) */}
-            {showNav && navStyle === "bottom" && (
+            {showNav && (
               <div className="absolute bottom-0 left-0 right-0 h-[65px] bg-white/95 backdrop-blur-md border-t border-zinc-100 flex items-center justify-around px-4 pb-2 shadow-[0_-8px_24px_rgba(0,0,0,0.04)] z-30">
                 {navItems.map((item) => {
                   const isActive = activeTab === item.id;
@@ -469,6 +444,7 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
                 })}
               </div>
             )}
+
           </div>
 
           {/* Safe-Area Bottom Home Indicator Line */}

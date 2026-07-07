@@ -4,7 +4,7 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite dev\" \"node --watch backend/server.js\"",
+    "dev": "concurrently \"vite dev\" \"node --watch-path=backend backend/server.js\"",
     "backend": "node backend/server.js",
     "build": "vite build",
     "build:dev": "vite build --mode development",

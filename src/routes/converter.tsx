@@ -67,10 +67,7 @@ function ConverterPage() {
         const plan = profile?.plan || "free";
         setUserPlan(plan);
         
-        let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
-        if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
-          backendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com";
-        }
+        const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com");
         try {
           const limitRes = await fetch(`${backendUrl}/api/pwa/check-limits/${userId}`);
           if (limitRes.ok) {
@@ -114,8 +111,18 @@ function ConverterPage() {
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [splashFile, setSplashFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string>("");
-  const [navStyle, setNavStyle] = useState<"top" | "bottom">("bottom");
   const [enableOptimization, setEnableOptimization] = useState(true);
+  const [includeBottomNav, setIncludeBottomNav] = useState(false);
+  const [navType, setNavType] = useState<"default" | "custom">("default");
+  const [customTabs, setCustomTabs] = useState<Array<{
+    label: string;
+    url: string;
+    icon: string;
+    customIconPreview?: string;
+  }>>([
+    { label: "Home", url: "/", icon: "home" },
+    { label: "Profile", url: "/profile", icon: "profile" }
+  ]);
   const [androidBuildFormat, setAndroidBuildFormat] = useState<"apk" | "aab">("apk");
   const [previewDevice, setPreviewDevice] = useState<"android" | "ios">("android");
   const [targetPlatform, setTargetPlatform] = useState<"android" | "ios" | "both">("both");
@@ -333,11 +340,21 @@ function ConverterPage() {
       let htmlFileUrl: string | null = null;
 
       if (iconFile) {
-        const path = `${userId}/icons/${Date.now()}-${iconFile.name}`;
-        const { error } = await supabase.storage.from("app-assets").upload(path, iconFile);
-        if (error) throw error;
-        iconUrl = supabase.storage.from("app-assets").getPublicUrl(path).data.publicUrl;
-      } else if (iconPreview && iconPreview.startsWith("http")) {
+        try {
+          const path = `${userId}/icons/${Date.now()}-${iconFile.name}`;
+          const { error } = await supabase.storage.from("app-assets").upload(path, iconFile);
+          if (error) throw error;
+          iconUrl = supabase.storage.from("app-assets").getPublicUrl(path).data.publicUrl;
+        } catch (storageErr) {
+          console.warn("Supabase storage upload failed. Falling back to local base64 transmission:", storageErr);
+          iconUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = (e) => reject(new Error("Failed to read icon file"));
+            reader.readAsDataURL(iconFile);
+          });
+        }
+      } else if (iconPreview) {
         iconUrl = iconPreview;
       }
       if (splashFile) {
@@ -439,7 +456,15 @@ function ConverterPage() {
           cacheStrategy: cacheStrategy,
           plan: userPlan,
           target_platform: targetPlatform,
-          android_build_format: androidBuildFormat
+          android_build_format: androidBuildFormat,
+          include_bottom_nav: includeBottomNav,
+          custom_navigation: includeBottomNav && navType === "custom"
+            ? customTabs.map(tab => ({
+                label: tab.label,
+                url: tab.url,
+                icon: tab.customIconPreview || tab.icon
+              }))
+            : []
         })
       });
 
@@ -681,7 +706,7 @@ function ConverterPage() {
                           Automatically configure service workers, build offline pages, clean desktop sidebars, and set iOS status bars.
                         </p>
                       </div>
-                      <div className="relative inline-flex items-center cursor-pointer select-none">
+                      <label htmlFor="opt-engine" className="relative inline-flex items-center cursor-pointer select-none">
                         <input
                           type="checkbox"
                           checked={enableOptimization}
@@ -690,8 +715,246 @@ function ConverterPage() {
                           id="opt-engine"
                         />
                         <div className="w-11 h-6 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary transition-colors border border-border" />
-                      </div>
+                      </label>
                     </div>
+                  </div>
+
+                  {/* Bottom Navigation Bar Customization Option */}
+                  <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 space-y-4 relative overflow-hidden group">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-bold flex items-center gap-1.5 text-primary">
+                          <Smartphone className="h-4 w-4" /> Bottom Navigation Bar
+                          {userPlan === 'free' && (
+                            <span className="text-[9px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-500 px-1.5 py-0.5 rounded-full border border-amber-500/20 shadow-sm ml-1.5 flex items-center gap-0.5">
+                              <Sparkles className="h-2.5 w-2.5 fill-amber-600/20" /> PRO
+                            </span>
+                          )}
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[220px]">
+                          Enable native navigation at the bottom of your app screen for standard user navigation.
+                        </p>
+                      </div>
+                      <label 
+                        onClick={(e) => {
+                          if (userPlan === 'free') {
+                            e.preventDefault();
+                            toast.error("Bottom Navigation Bar is a Premium feature. Please upgrade to Pro/Console plan.");
+                          }
+                        }}
+                        htmlFor="bottom-nav-toggle" 
+                        className="relative inline-flex items-center cursor-pointer select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={userPlan !== 'free' && includeBottomNav}
+                          onChange={(e) => setIncludeBottomNav(e.target.checked)}
+                          className="sr-only peer"
+                          id="bottom-nav-toggle"
+                        />
+                        <div className="w-11 h-6 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary transition-colors border border-border" />
+                      </label>
+                    </div>
+
+                    {includeBottomNav && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-4 pt-3 border-t border-primary/10"
+                      >
+                        {/* Navigation Type Selector */}
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold text-muted-foreground">Navigation Style</Label>
+                          <div className="grid grid-cols-2 gap-2 bg-muted/50 p-1 rounded-xl">
+                            <button
+                              type="button"
+                              onClick={() => setNavType("default")}
+                              className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                                navType === "default"
+                                  ? "bg-background text-foreground shadow-sm"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              Default Controls
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNavType("custom")}
+                              className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+                                navType === "custom"
+                                  ? "bg-background text-foreground shadow-sm"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              Custom Tabs (Instagram style)
+                            </button>
+                          </div>
+                        </div>
+
+                        {navType === "default" ? (
+                          <div className="bg-muted/30 rounded-xl p-3 text-xs text-muted-foreground space-y-1.5">
+                            <p className="font-semibold text-foreground">Standard Browser Actions:</p>
+                            <ul className="list-disc pl-4 space-y-0.5">
+                              <li><strong>Back:</strong> Go back in browser history</li>
+                              <li><strong>Home:</strong> Return to initial App URL</li>
+                              <li><strong>Refresh:</strong> Reload current page</li>
+                              <li><strong>Forward:</strong> Go forward in browser history</li>
+                            </ul>
+                          </div>
+                        ) : (
+                          <div className="space-y-3.5">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-bold text-muted-foreground">App Tabs (Max 5)</Label>
+                              {customTabs.length < 5 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setCustomTabs([
+                                      ...customTabs,
+                                      { label: `Tab ${customTabs.length + 1}`, url: "/", icon: "home" }
+                                    ]);
+                                  }}
+                                  className="h-7 text-[11px] gap-1 px-2.5"
+                                >
+                                  <PlusCircle className="h-3.5 w-3.5" /> Add Tab
+                                </Button>
+                              )}
+                            </div>
+
+                            {/* List of tabs */}
+                            <div className="space-y-3">
+                              {customTabs.map((tab, idx) => (
+                                <div key={idx} className="bg-muted/30 border border-border/60 rounded-xl p-3.5 space-y-3 relative group/tab">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = [...customTabs];
+                                      updated.splice(idx, 1);
+                                      setCustomTabs(updated);
+                                    }}
+                                    className="absolute top-2.5 right-2.5 text-muted-foreground hover:text-destructive transition-colors p-1"
+                                    title="Delete tab"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                  </button>
+
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] font-bold text-muted-foreground">Tab Title</Label>
+                                      <Input
+                                        value={tab.label}
+                                        onChange={(e) => {
+                                          const updated = [...customTabs];
+                                          updated[idx].label = e.target.value;
+                                          setCustomTabs(updated);
+                                        }}
+                                        placeholder="e.g. Profile"
+                                        className="h-8 text-xs"
+                                        maxLength={15}
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] font-bold text-muted-foreground">Redirect URL / Path</Label>
+                                      <Input
+                                        value={tab.url}
+                                        onChange={(e) => {
+                                          const updated = [...customTabs];
+                                          updated[idx].url = e.target.value;
+                                          setCustomTabs(updated);
+                                        }}
+                                        placeholder="e.g. /profile or https://..."
+                                        className="h-8 text-xs"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-bold text-muted-foreground">Tab Icon</Label>
+                                    <div className="flex flex-wrap gap-1.5 items-center">
+                                      {[
+                                        { id: "home", label: "Home" },
+                                        { id: "search", label: "Search" },
+                                        { id: "video", label: "Reels" },
+                                        { id: "profile", label: "Profile" },
+                                        { id: "bell", label: "Alerts" },
+                                        { id: "message", label: "Chat" },
+                                        { id: "plus", label: "Create" },
+                                        { id: "settings", label: "Settings" }
+                                      ].map((iconPreset) => (
+                                        <button
+                                          key={iconPreset.id}
+                                          type="button"
+                                          onClick={() => {
+                                            const updated = [...customTabs];
+                                            updated[idx].icon = iconPreset.id;
+                                            delete updated[idx].customIconPreview;
+                                            setCustomTabs(updated);
+                                          }}
+                                          className={`py-1 px-2.5 rounded-lg text-[10px] font-medium border transition-all ${
+                                            tab.icon === iconPreset.id && !tab.customIconPreview
+                                              ? "bg-primary/10 border-primary text-primary"
+                                              : "bg-background border-border text-muted-foreground hover:text-foreground"
+                                          }`}
+                                        >
+                                          {iconPreset.label}
+                                        </button>
+                                      ))}
+
+                                      <label className="relative cursor-pointer">
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                              const reader = new FileReader();
+                                              reader.onload = (event) => {
+                                                const base64 = event.target?.result as string;
+                                                const updated = [...customTabs];
+                                                updated[idx].customIconPreview = base64;
+                                                updated[idx].icon = "custom";
+                                                setCustomTabs(updated);
+                                              };
+                                              reader.readAsDataURL(file);
+                                            }
+                                          }}
+                                          className="sr-only"
+                                        />
+                                        <div
+                                          className={`py-1 px-2.5 rounded-lg text-[10px] font-semibold border flex items-center gap-1 transition-all ${
+                                            tab.customIconPreview
+                                              ? "bg-accent/10 border-accent text-accent"
+                                              : "bg-background border-border text-muted-foreground hover:text-foreground"
+                                          }`}
+                                        >
+                                          {tab.customIconPreview ? (
+                                            <>
+                                              <img
+                                                src={tab.customIconPreview}
+                                                alt="Custom icon"
+                                                className="w-3.5 h-3.5 rounded-full object-cover"
+                                              />
+                                              Custom uploaded
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Upload className="h-3 w-3" /> Upload Custom
+                                            </>
+                                          )}
+                                        </div>
+                                      </label>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -751,24 +1014,49 @@ function ConverterPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Target Platform</Label>
-                    <div className="flex gap-2">
-                      {[
-                        { id: "both", label: "Both" },
-                        { id: "android", label: "Android" },
-                        { id: "ios", label: "iOS" }
-                      ].map((p) => (
-                        <button 
-                          key={p.id} 
-                          type="button" 
-                          onClick={() => setTargetPlatform(p.id as any)} 
-                          className={`flex-1 flex items-center justify-center gap-1 h-10 rounded-lg border ${targetPlatform === p.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-[11px] font-medium`}
-                        >
-                          {p.label}
-                        </button>
-                      ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Target Platform</Label>
+                      <div className="flex gap-2">
+                        {[
+                          { id: "both", label: "Both" },
+                          { id: "android", label: "Android" },
+                          { id: "ios", label: "iOS" }
+                        ].map((p) => (
+                          <button 
+                            key={p.id} 
+                            type="button" 
+                            onClick={() => setTargetPlatform(p.id as any)} 
+                            className={`flex-1 flex items-center justify-center gap-1 h-10 rounded-lg border ${targetPlatform === p.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-[11px] font-medium`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                    {targetPlatform !== "ios" && (
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-1">
+                          Android Build Format
+                          <span className="text-[10px] text-muted-foreground font-normal">(AAB required for Play Store)</span>
+                        </Label>
+                        <div className="flex gap-2">
+                          {[
+                            { id: "apk", label: "APK (Local Test)" },
+                            { id: "aab", label: "AAB (Play Store)" }
+                          ].map((f) => (
+                            <button 
+                              key={f.id} 
+                              type="button" 
+                              onClick={() => setAndroidBuildFormat(f.id as any)} 
+                              className={`flex-1 flex items-center justify-center gap-1 h-10 rounded-lg border ${androidBuildFormat === f.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-[11px] font-medium`}
+                            >
+                              {f.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -868,20 +1156,14 @@ function ConverterPage() {
                     {downloadUrl && targetPlatform !== "ios" && (
                       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
                         <Button variant="outline" size="xl" className="flex-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20" asChild>
-                          <a href={downloadUrl} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.apk`}>
+                          <a href={`${downloadUrl}?format=apk`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.apk`}>
                             <Download className="h-5 w-5 mr-2" /> Download APK
                           </a>
                         </Button>
-                        <Button variant="outline" size="xl" className="flex-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20" onClick={() => {
-                          const blob = new Blob(["obb-data-not-required-for-lightweight-apps"], { type: "application/octet-stream" });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `main.1.com.${(appName || "app").replace(/[^a-zA-Z0-9]/g, "").toLowerCase()}.obb`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }}>
-                          <Download className="h-5 w-5 mr-2" /> Download OBB
+                        <Button variant="outline" size="xl" className="flex-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20" asChild>
+                          <a href={`${downloadUrl}?format=aab`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.aab`}>
+                            <Download className="h-5 w-5 mr-2" /> Download AAB
+                          </a>
                         </Button>
                       </motion.div>
                     )}
@@ -969,18 +1251,10 @@ function ConverterPage() {
                     {targetPlatform !== "ios" && (
                       <>
                         <Button variant="hero" className="flex-1 gap-2" asChild>
-                          <a href={downloadUrl} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.apk`}><Download className="h-4 w-4" /> Download APK</a>
+                          <a href={`${downloadUrl}?format=apk`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.apk`}><Download className="h-4 w-4" /> Download APK</a>
                         </Button>
-                        <Button variant="outline" className="flex-1 gap-2" onClick={() => {
-                          const blob = new Blob(["obb-data-not-required-for-lightweight-apps"], { type: "application/octet-stream" });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = `main.1.com.${(appName || "app").replace(/[^a-zA-Z0-9]/g, "").toLowerCase()}.obb`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }}>
-                          <Download className="h-4 w-4" /> Download OBB
+                        <Button variant="outline" className="flex-1 gap-2" asChild>
+                          <a href={`${downloadUrl}?format=aab`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.aab`}><Download className="h-4 w-4" /> Download AAB</a>
                         </Button>
                       </>
                     )}
@@ -1011,7 +1285,7 @@ function ConverterPage() {
                 <Smartphone className="h-3.5 w-3.5" /> iOS
               </button>
             </div>
-            <PhonePreview url={sourceType === "url" ? websiteUrl : htmlPreviewUrl} appName={appName} themeColor={themeColor} iconUrl={iconPreview} navStyle={navStyle} deviceMode={previewDevice} />
+            <PhonePreview url={sourceType === "url" ? websiteUrl : htmlPreviewUrl} appName={appName} themeColor={themeColor} iconUrl={iconPreview} deviceMode={previewDevice} includeBottomNav={includeBottomNav} />
           </div>
         </div>
       </section>

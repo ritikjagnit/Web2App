@@ -41,13 +41,7 @@ const initSqlite = () => {
                             apk_url TEXT,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
-                    `, () => {
-                        sqliteDb.run(`
-                            ALTER TABLE app_builds ADD COLUMN file_data BLOB
-                        `, (err) => {
-                            // Ignore if column already exists
-                        });
-                    });
+                    `);
 
                     sqliteDb.run(`
                         CREATE TABLE IF NOT EXISTS profiles (
@@ -66,8 +60,8 @@ const initSqlite = () => {
 };
 
 const initDb = async () => {
-    // Try connecting to Postgres/Neon first if DATABASE_URL is set
-    if (process.env.DATABASE_URL) {
+    // Try connecting to Postgres/Neon first if DATABASE_URL is set and not the placeholder
+    if (process.env.DATABASE_URL && process.env.DATABASE_URL !== 'your_database_url_here') {
         try {
             pool = new Pool({
                 connectionString: process.env.DATABASE_URL,
@@ -99,10 +93,6 @@ const initDb = async () => {
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
-            
-            await client.query(`
-                ALTER TABLE app_builds ADD COLUMN IF NOT EXISTS file_data BYTEA;
-            `);
 
             await client.query(`
                 CREATE TABLE IF NOT EXISTS profiles (
@@ -120,7 +110,7 @@ const initDb = async () => {
             console.warn('Neon Database connection failed. Falling back to local SQLite database...', err.message);
         }
     } else {
-        console.warn('DATABASE_URL not found. Falling back to local SQLite database...');
+        console.warn('DATABASE_URL not found or set to default placeholder. Falling back to local SQLite database...');
     }
 
     await initSqlite();

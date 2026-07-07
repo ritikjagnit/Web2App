@@ -83,10 +83,7 @@ const MOCK_CHART_DATA = [
   { name: "Sun", builds: 10 },
 ];
 
-let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
-if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
-  backendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com";
-}
+const backendUrl = (import.meta.env.VITE_BACKEND_URL as string) || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? "http://localhost:5001" : "https://web2app-689l.onrender.com");
 
 function DashboardPage() {
   const session = useAuthGuard();
@@ -143,7 +140,8 @@ function DashboardPage() {
           sourceType: latestApp.html_file_url ? 'html' : 'url',
           htmlContent: latestApp.html_file_url ? '<!-- rebuilt offline html -->' : '',
           iconUrl: latestApp.icon_url,
-          cacheStrategy: "StaleWhileRevalidate"
+          cacheStrategy: "StaleWhileRevalidate",
+          android_build_format: latestApp.android_build_format || "apk"
         })
       });
 
@@ -307,28 +305,36 @@ function DashboardPage() {
     }
   };
 
-  const handlePwaDownload = async (app: App) => {
+  const handlePwaDownload = async (app: App, formatOverride?: "apk" | "aab") => {
     if (!app.apk_url) return;
+    const format = formatOverride || (app.android_build_format === "aab" ? "aab" : "apk");
+    const label = format.toUpperCase();
     try {
-      toast.info("Downloading Android APK...");
-      const fullUrl = app.apk_url.startsWith('/') ? `${backendUrl}${app.apk_url}` : app.apk_url;
-      const response = await fetch(fullUrl);
+      toast.info(`Downloading Android ${label}...`);
+      const downloadUrl = app.apk_url.includes("?") 
+        ? `${app.apk_url}&format=${format}` 
+        : `${app.apk_url}?format=${format}`;
+        
+      const response = await fetch(downloadUrl);
       const blob = await response.blob();
 
-      const apkBlob = new Blob([blob], { type: "application/vnd.android.package-archive" });
-      const url = window.URL.createObjectURL(apkBlob);
+      const mimeType = format === "aab" ? "application/octet-stream" : "application/vnd.android.package-archive";
+      const fileBlob = new Blob([blob], { type: mimeType });
+      const url = window.URL.createObjectURL(fileBlob);
       const link = document.createElement("a");
       link.href = url;
-      const fileName = `${app.name.replace(/[^a-zA-Z0-9]/g, "_")}.apk`;
+      const fileName = `${app.name.replace(/[^a-zA-Z0-9]/g, "_")}.${format}`;
       link.setAttribute("download", fileName);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      toast.success("Download started");
+      toast.success(`${label} download started`);
     } catch (error) {
-      const fullUrl = app.apk_url.startsWith('/') ? `${backendUrl}${app.apk_url}` : app.apk_url;
-      window.open(fullUrl, "_blank");
+      const downloadUrl = app.apk_url.includes("?") 
+        ? `${app.apk_url}&format=${format}` 
+        : `${app.apk_url}?format=${format}`;
+      window.open(downloadUrl, "_blank");
     }
   };
 
@@ -521,7 +527,7 @@ function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onDownload
                     <div>
                       <h4 className="text-xl font-bold flex flex-col sm:flex-row items-center gap-2 justify-center sm:justify-start">
                         {apps[0].name} 
-                        <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full shrink-0">APK Package</span>
+                        <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full shrink-0">{apps[0].android_build_format === 'aab' ? 'AAB Bundle' : 'APK Package'}</span>
                       </h4>
                       <p className="text-sm text-muted-foreground mt-1">
                         {apps[0].website_url.startsWith("http") ? new URL(apps[0].website_url).hostname : "Local HTML Source"}
@@ -529,11 +535,11 @@ function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onDownload
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto">
-                    <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(apps[0])}>
-                      <Download className="h-4 w-4 mr-2" /> Android APK
+                    <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(apps[0], "apk")}>
+                      <Download className="h-4 w-4 mr-2" /> Download APK
                     </Button>
-                    <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownloadObb(apps[0])}>
-                      <Download className="h-4 w-4 mr-2" /> OBB File
+                    <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownload(apps[0], "aab")}>
+                      <Download className="h-4 w-4 mr-2" /> Download AAB
                     </Button>
                     <div className="flex gap-2 w-full sm:w-auto justify-center">
                       <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onPreview(apps[0])}><Eye className="h-4 w-4" /></Button>
@@ -637,7 +643,7 @@ function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit,
                         <div>
                           <h4 className="text-lg font-bold flex flex-col sm:flex-row items-center gap-2 justify-center sm:justify-start">
                             {app.name} 
-                            <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full shrink-0">PRO APK</span>
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full shrink-0">PRO {app.android_build_format === 'aab' ? 'AAB' : 'APK'}</span>
                           </h4>
                           <div className="flex flex-col sm:flex-row items-center gap-2 mt-1.5 justify-center sm:justify-start">
                             <p className="text-[10px] text-muted-foreground font-mono uppercase bg-white/5 px-2 py-0.5 rounded-md shrink-0">Android App</p>
@@ -646,11 +652,11 @@ function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit,
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto relative z-10">
-                        <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(app)}>
-                          <Download className="h-4 w-4 mr-2" /> Android APK
+                        <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(app, "apk")}>
+                          <Download className="h-4 w-4 mr-2" /> Download APK
                         </Button>
-                        <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownloadObb(app)}>
-                          <Download className="h-4 w-4 mr-2" /> OBB File
+                        <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownload(app, "aab")}>
+                          <Download className="h-4 w-4 mr-2" /> Download AAB
                         </Button>
                         <div className="flex gap-2 w-full sm:w-auto justify-center">
                           <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onPreview(app)}><Eye className="h-4 w-4" /></Button>
@@ -1118,7 +1124,7 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
                         <div>
                           <div className="flex flex-col sm:flex-row items-center gap-3 mb-2 justify-center sm:justify-start">
                             <h4 className="text-2xl font-bold tracking-tighter text-foreground">{app.name}</h4>
-                            <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black px-2 py-0.5 rounded-md border border-amber-500/20 uppercase shadow-sm shrink-0">Enterprise APK</span>
+                            <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black px-2 py-0.5 rounded-md border border-amber-500/20 uppercase shadow-sm shrink-0">Enterprise {app.android_build_format === 'aab' ? 'AAB' : 'APK'}</span>
                           </div>
                           <div className="flex flex-col sm:flex-row items-center gap-4 text-xs font-mono text-muted-foreground justify-center sm:justify-start">
                             <span className="flex items-center gap-1.5"><Globe className="h-3 w-3" /> {app.website_url.startsWith("http") ? new URL(app.website_url).hostname : "Local HTML Source"}</span>
@@ -1127,11 +1133,11 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto relative z-10">
-                        <Button className="rounded-xl h-10 px-4 bg-amber-500 text-white hover:bg-amber-600 font-bold shadow-lg shadow-amber-500/20 hover:scale-105 hover:shadow-amber-500/40 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app)}>
-                          <Download className="h-4 w-4 mr-2" /> Android APK
+                        <Button className="rounded-xl h-10 px-4 bg-amber-500 text-white hover:bg-amber-600 font-bold shadow-lg shadow-amber-500/20 hover:scale-105 hover:shadow-amber-500/40 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app, "apk")}>
+                          <Download className="h-4 w-4 mr-2" /> Download APK
                         </Button>
-                        <Button variant="outline" className="rounded-xl h-10 px-4 border-dashed border-amber-500/50 hover:bg-amber-500/10 hover:border-amber-500 font-bold hover:scale-105 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownloadObb(app)}>
-                          <Download className="h-4 w-4 mr-2" /> OBB File
+                        <Button variant="outline" className="rounded-xl h-10 px-4 border-dashed border-amber-500/50 hover:bg-amber-500/10 hover:border-amber-500 font-bold hover:scale-105 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app, "aab")}>
+                          <Download className="h-4 w-4 mr-2" /> Download AAB
                         </Button>
                         <div className="flex gap-2 w-full sm:w-auto justify-center">
                           <Button variant="outline" className="h-10 w-10 p-0 rounded-xl border-border hover:bg-muted hover:scale-105 transition-all duration-300" onClick={() => onPreview(app)}><Eye className="h-4 w-4 text-foreground" /></Button>

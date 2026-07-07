@@ -30,3 +30,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# App-Weaver custom ignored files
+output/
+builds/
+*.db
+*.db-journal
+*.apk
+*.aab
+temp_icon_*.png
+backend/output/

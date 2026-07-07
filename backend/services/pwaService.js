@@ -108,7 +108,7 @@ async function generatePwaIcons(iconUrl, appName, themeColor, buildId) {
 
     if (iconUrl) {
         logMsg(buildId, `Downloading icon from: ${iconUrl}`);
-        const tempIconPath = path.join(__dirname, `../output/temp_icon_${buildId}.png`);
+        const tempIconPath = path.resolve(__dirname, `../../output/temp_icon_${buildId}.png`);
         const outputDir = path.dirname(tempIconPath);
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
@@ -601,30 +601,15 @@ function triggerGitHubBuild(payload) {
 }
 
 // 5. Generate PWA Package (Asynchronous Build Task) - Modified to Build Android APK
-async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat }) {
+async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat, includeBottomNav, customNavigation }) {
     const pool = require('../db/database');
     const updateDbStatus = async (status, packageUrl = null) => {
         try {
-            let fileBuffer = null;
-            if (status === 'success') {
-                try {
-                    const fs = require('fs');
-                    if (typeof finalPackagePath !== 'undefined' && fs.existsSync(finalPackagePath)) {
-                        fileBuffer = fs.readFileSync(finalPackagePath);
-                    }
-                } catch (fsErr) {
-                    console.error('Failed to read package for db storage:', fsErr);
-                }
-            }
-
             await pool.query(
-                `INSERT INTO app_builds (id, user_id, website_url, status, apk_url, file_data)
-                 VALUES ($1, $2, $3, $4, $5, $6)
-                 ON CONFLICT (id) DO UPDATE SET 
-                    status = EXCLUDED.status, 
-                    apk_url = COALESCE(EXCLUDED.apk_url, app_builds.apk_url),
-                    file_data = COALESCE(EXCLUDED.file_data, app_builds.file_data)`,
-                [buildId, userId || 'guest', websiteUrl || 'local-html', status, packageUrl, fileBuffer]
+                `INSERT INTO app_builds (id, user_id, website_url, status, apk_url)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, apk_url = COALESCE(EXCLUDED.apk_url, app_builds.apk_url)`,
+                [buildId, userId || 'guest', websiteUrl || 'local-html', status, packageUrl]
             );
         } catch (e) {
             console.error('Failed to update Postgres build status:', e);
@@ -762,6 +747,49 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         fs.writeFileSync(capConfigPath, capConfig, 'utf8');
         logMsg(buildId, "Capacitor config customized successfully.");
 
+        // Process custom navigation tabs
+        let processedNavigation = [];
+        if (includeBottomNav && Array.isArray(customNavigation) && customNavigation.length > 0) {
+            for (let i = 0; i < customNavigation.length; i++) {
+                const item = customNavigation[i];
+                let iconValue = item.icon || 'home';
+                
+                if (iconValue && iconValue.startsWith('data:image/')) {
+                    try {
+                        const matches = iconValue.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+                        if (matches && matches.length === 3) {
+                            const base64Data = matches[2];
+                            const buffer = Buffer.from(base64Data, 'base64');
+                            
+                            const drawableName = `custom_icon_${i}`;
+                            const iconPath = path.join(workspaceDir, `android/app/src/main/res/drawable/${drawableName}.png`);
+                            
+                            fs.writeFileSync(iconPath, buffer);
+                            iconValue = drawableName;
+                            logMsg(buildId, `Saved custom navigation icon for tab: ${item.label}`);
+                        }
+                    } catch (err) {
+                        console.error('Failed to write custom navigation icon:', err);
+                        iconValue = 'home';
+                    }
+                }
+                
+                processedNavigation.push({
+                    label: item.label || '',
+                    url: item.url || '',
+                    icon: iconValue
+                });
+            }
+        }
+
+        const navJsonString = processedNavigation.length > 0 
+            ? JSON.stringify(processedNavigation)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '\\"')
+            : 'none';
+
         // Update strings.xml (App name on device)
         const stringsXmlPath = path.join(workspaceDir, 'android/app/src/main/res/values/strings.xml');
         let stringsXml = fs.readFileSync(stringsXmlPath, 'utf8');
@@ -769,6 +797,8 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         stringsXml = stringsXml.replace(/<string name="title_activity_main">[^<]+<\/string>/g, `<string name="title_activity_main">${appName}</string>`);
         stringsXml = stringsXml.replace(/<string name="package_name">[^<]+<\/string>/g, `<string name="package_name">${packageName}</string>`);
         stringsXml = stringsXml.replace(/<string name="custom_url_scheme">[^<]+<\/string>/g, `<string name="custom_url_scheme">${packageName}</string>`);
+        stringsXml = stringsXml.replace(/<string name="show_bottom_nav">[^<]+<\/string>/g, `<string name="show_bottom_nav">${includeBottomNav ? 'true' : 'false'}</string>`);
+        stringsXml = stringsXml.replace(/<string name="custom_navigation_json">[^<]+<\/string>/g, `<string name="custom_navigation_json">${navJsonString}</string>`);
         fs.writeFileSync(stringsXmlPath, stringsXml, 'utf8');
 
         // Update build.gradle (Gradle Package namespaces)
@@ -776,12 +806,6 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         let buildGradle = fs.readFileSync(buildGradlePath, 'utf8');
         buildGradle = buildGradle.replace(/namespace\s+['"][^'"]+['"]/g, `namespace "${packageName}"`);
         buildGradle = buildGradle.replace(/applicationId\s+['"][^'"]+['"]/g, `applicationId "${packageName}"`);
-        
-        // Generate a dynamic version code to ensure each build is considered an update by Android
-        const timestampSeconds = Math.floor(Date.now() / 1000);
-        buildGradle = buildGradle.replace(/versionCode\s+\d+/g, `versionCode ${timestampSeconds}`);
-        buildGradle = buildGradle.replace(/versionName\s+['"][^'"]+['"]/g, `versionName "1.0.${timestampSeconds}"`);
-        
         fs.writeFileSync(buildGradlePath, buildGradle, 'utf8');
 
         // Move and update MainActivity.java package name to match the new packageName/namespace
@@ -812,10 +836,9 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         await runCommand('npx cap sync android', workspaceDir, buildId);
 
         // --- STEP 4: COMPILING PACKAGE VIA GRADLE ---
-        const formatName = androidBuildFormat === 'aab' ? 'Google Play AAB Bundle' : 'Android APK';
-        logMsg(buildId, `Step 4: Launching Android build pipeline and Gradle compiler for ${formatName}...`);
+        logMsg(buildId, `Step 4: Launching Android build pipeline to compile both APK and AAB packages...`);
         buildsStore[buildId].progress = 85;
-        buildsStore[buildId].step = `Compiling ${androidBuildFormat === 'aab' ? 'AAB' : 'APK'}`;
+        buildsStore[buildId].step = `Compiling APK & AAB`;
 
         // Get correct Android SDK Path for current user using homedir
         const os = require('os');
@@ -828,23 +851,21 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
             usePlaceholder = true;
         }
 
-        const extension = androidBuildFormat === 'aab' ? 'aab' : 'apk';
-        const finalPackagePath = path.join(buildsDir, `app-release.${extension}`);
+        const finalApkPath = path.join(buildsDir, `app-release.apk`);
+        const finalAabPath = path.join(buildsDir, `app-release.aab`);
 
         if (usePlaceholder) {
             logMsg(buildId, "Simulating Gradle build task...");
             await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate build time
-            const placeholderPath = path.resolve(__dirname, `../templates/android-placeholder.${extension === 'aab' ? 'aab' : 'apk'}`);
-            const finalPlaceholderPath = fs.existsSync(placeholderPath) 
-                ? placeholderPath 
-                : path.resolve(__dirname, '../templates/android-placeholder.apk'); // Fallback to apk if aab is not available
+            const placeholderApkPath = path.resolve(__dirname, '../templates/android-placeholder.apk');
 
-            if (fs.existsSync(finalPlaceholderPath)) {
+            if (fs.existsSync(placeholderApkPath)) {
                 if (!fs.existsSync(buildsDir)) {
                     fs.mkdirSync(buildsDir, { recursive: true });
                 }
-                fs.copyFileSync(finalPlaceholderPath, finalPackagePath);
-                logMsg(buildId, `[DEMO SUCCESS] Pre-compiled template APK copied to: ${finalPackagePath}`);
+                fs.copyFileSync(placeholderApkPath, finalApkPath);
+                fs.copyFileSync(placeholderApkPath, finalAabPath); // Simulate AAB by copying placeholder apk
+                logMsg(buildId, `[DEMO SUCCESS] Pre-compiled template APK & AAB copied.`);
             } else {
                 throw new Error("Android build placeholder template is missing on server!");
             }
@@ -855,25 +876,27 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
 
             // Run gradlew task inside android directory
             const androidDir = path.join(workspaceDir, 'android');
-            const gradleTask = androidBuildFormat === 'aab' ? 'bundleDebug' : 'assembleDebug';
-            logMsg(buildId, `Starting Gradle task: gradlew ${gradleTask}...`);
-            await runCommand(`cmd.exe /c gradlew.bat ${gradleTask}`, androidDir, buildId);
+            logMsg(buildId, `Starting Gradle task: gradlew assembleDebug bundleDebug...`);
+            await runCommand(`cmd.exe /c gradlew.bat assembleDebug bundleDebug`, androidDir, buildId);
 
-            // Check if output package exists
-            const compiledFileRelativePath = androidBuildFormat === 'aab'
-                ? 'android/app/build/outputs/bundle/debug/app-debug.aab'
-                : 'android/app/build/outputs/apk/debug/app-debug.apk';
-            const compiledFilePath = path.join(workspaceDir, compiledFileRelativePath);
-            if (!fs.existsSync(compiledFilePath)) {
-                throw new Error(`Gradle build process completed but output ${path.basename(compiledFilePath)} was not found!`);
+            // Check if output packages exist
+            const compiledApkPath = path.join(workspaceDir, 'android/app/build/outputs/apk/debug/app-debug.apk');
+            const compiledAabPath = path.join(workspaceDir, 'android/app/build/outputs/bundle/debug/app-debug.aab');
+
+            if (!fs.existsSync(compiledApkPath)) {
+                throw new Error(`Gradle build process completed but APK was not found!`);
+            }
+            if (!fs.existsSync(compiledAabPath)) {
+                throw new Error(`Gradle build process completed but AAB was not found!`);
             }
 
-            // Copy built package to buildsDir
+            // Copy built packages to buildsDir
             if (!fs.existsSync(buildsDir)) {
                 fs.mkdirSync(buildsDir, { recursive: true });
             }
-            fs.copyFileSync(compiledFilePath, finalPackagePath);
-            logMsg(buildId, `${formatName} successfully compiled at: ${finalPackagePath}`);
+            fs.copyFileSync(compiledApkPath, finalApkPath);
+            fs.copyFileSync(compiledAabPath, finalAabPath);
+            logMsg(buildId, `APK and AAB successfully compiled.`);
         }
 
         // Clean up temporary workspace directory
@@ -885,11 +908,11 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         }
 
         // --- COMPLETED ---
-        logMsg(buildId, `✓ ${formatName} package created successfully!`);
+        logMsg(buildId, `✓ APK and AAB packages created successfully!`);
         buildsStore[buildId].progress = 100;
         buildsStore[buildId].step = 'Completed';
         buildsStore[buildId].status = 'success';
-        buildsStore[buildId].packagePath = finalPackagePath;
+        buildsStore[buildId].packagePath = finalApkPath;
 
         const downloadUrl = `/api/pwa/download/${buildId}`;
         await updateDbStatus('success', downloadUrl);
@@ -915,19 +938,14 @@ async function generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDi
     if (iconUrl) {
         try {
             if (iconUrl.startsWith('data:')) {
-                logMsg(buildId, "Decoding icon from base64 data URI...");
-                const commaIdx = iconUrl.indexOf(',');
-                if (commaIdx !== -1) {
-                    const base64Data = iconUrl.substring(commaIdx + 1);
-                    const buffer = Buffer.from(base64Data, 'base64');
-                    baseImage = await Jimp.read(buffer);
-                    logMsg(buildId, "Icon decoded successfully from base64 data URI.");
-                } else {
-                    throw new Error("Invalid data URI format");
-                }
+                logMsg(buildId, "Parsing icon from base64 data URL for Android app.");
+                const base64Data = iconUrl.split(';base64,').pop();
+                const iconBuffer = Buffer.from(base64Data, 'base64');
+                baseImage = await Jimp.read(iconBuffer);
+                logMsg(buildId, "Icon loaded from base64 data URL successfully for Android app.");
             } else {
                 logMsg(buildId, `Downloading icon from: ${iconUrl}`);
-                const tempIconPath = path.join(__dirname, `../output/temp_icon_${buildId}.png`);
+                const tempIconPath = path.resolve(__dirname, `../../output/temp_icon_${buildId}.png`);
                 const outputDir = path.dirname(tempIconPath);
                 if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
                 await downloadFile(iconUrl, tempIconPath);
@@ -936,7 +954,7 @@ async function generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDi
                 fs.unlinkSync(tempIconPath);
             }
         } catch (downloadErr) {
-            logMsg(buildId, `Failed to process icon: ${downloadErr.message}. Falling back to default generated icon.`);
+            logMsg(buildId, `Failed to load icon: ${downloadErr.message}. Falling back to default generated icon.`);
         }
     }
 
@@ -991,7 +1009,7 @@ async function generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDi
 }
 
 // Service exports
-exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, plan, androidBuildFormat }) => {
+exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, plan, androidBuildFormat, includeBottomNav, customNavigation }) => {
     const buildId = `apk_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const workspaceDir = path.resolve(__dirname, `../../output/workspace/${buildId}`);
     const buildsDir = path.resolve(__dirname, `../../builds/${buildId}`);
@@ -1012,7 +1030,7 @@ exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, th
     };
 
     // Run packaging asynchronously
-    runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat })
+    runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat, includeBottomNav, customNavigation })
         .catch(err => {
             console.error(`Android app build pipeline crash:`, err);
             buildsStore[buildId].status = 'failed';

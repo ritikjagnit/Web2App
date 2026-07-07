@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">My Awesome App (via Stufflas)</string>
-    <string name="title_activity_main">My Awesome App (via Stufflas)</string>
-    <string name="package_name">com.appweaver.myawesomeappviastufflas_p4hfqj</string>
-    <string name="custom_url_scheme">com.appweaver.myawesomeappviastufflas_p4hfqj</string>
-</resources>

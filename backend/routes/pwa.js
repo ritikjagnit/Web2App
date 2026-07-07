@@ -99,7 +99,9 @@ router.post('/build', async (req, res) => {
         iconUrl,
         cacheStrategy,
         plan,
-        android_build_format
+        android_build_format,
+        include_bottom_nav,
+        custom_navigation
     } = req.body;
     
     if (sourceType !== 'html' && !website_url) {
@@ -118,6 +120,10 @@ router.post('/build', async (req, res) => {
         }
 
         const isBypass = email === 'ritikjagnit@gmail.com';
+        if (activePlan === 'free' && include_bottom_nav && !isBypass) {
+            return res.status(403).json({ error: 'Bottom Navigation Bar is a Premium feature. Please upgrade to Pro/Console plan.' });
+        }
+
         if (activePlan === 'free' && user_id && !isBypass) {
             const buildsResult = await pool.query('SELECT COUNT(*) as count FROM app_builds WHERE user_id = $1', [user_id]);
             const count = parseInt(buildsResult.rows[0]?.count || '0');
@@ -142,7 +148,9 @@ router.post('/build', async (req, res) => {
             iconUrl: iconUrl,
             cacheStrategy: cacheStrategy || 'StaleWhileRevalidate',
             plan: plan || 'free',
-            androidBuildFormat: android_build_format || 'apk'
+            androidBuildFormat: android_build_format || 'apk',
+            includeBottomNav: include_bottom_nav === true,
+            customNavigation: custom_navigation
         });
 
         res.json({ 
@@ -258,22 +266,13 @@ router.post('/upload-build/:buildId', upload.single('file'), async (req, res) =>
             }
 
             const path = require('path');
-            const fs = require('fs');
             const finalPath = req.file.path;
             const downloadUrl = `/api/pwa/download/${buildId}`;
 
-            // Read the binary file into a buffer
-            let fileBuffer = null;
-            try {
-                fileBuffer = fs.readFileSync(finalPath);
-            } catch (fsErr) {
-                console.error(`Failed to read uploaded build file for DB storage:`, fsErr);
-            }
-
-            // Update Database with file data
+            // Update Database
             await pool.query(
-                `UPDATE app_builds SET status = 'success', apk_url = $1, file_data = $2 WHERE id = $3`,
-                [downloadUrl, fileBuffer, buildId]
+                `UPDATE app_builds SET status = 'success', apk_url = $1 WHERE id = $2`,
+                [downloadUrl, buildId]
             );
 
             // Update in-memory state in pwaService
@@ -310,13 +309,35 @@ router.post('/upload-build/:buildId', upload.single('file'), async (req, res) =>
 });
 
 // GET /api/pwa/build/status/:buildId
-router.get('/build/status/:buildId', (req, res) => {
-    const build = pwaService.getBuildStatus(req.params.buildId);
+router.get('/build/status/:buildId', async (req, res) => {
+    const buildId = req.params.buildId;
+    let build = pwaService.getBuildStatus(buildId);
+    
+    if (!build) {
+        try {
+            const dbResult = await pool.query('SELECT status, apk_url FROM app_builds WHERE id = $1', [buildId]);
+            if (dbResult.rows.length > 0) {
+                const dbBuild = dbResult.rows[0];
+                const isRunningButDead = dbBuild.status === 'running';
+                const finalStatus = isRunningButDead ? 'failed' : dbBuild.status;
+                build = {
+                    id: buildId,
+                    status: finalStatus,
+                    progress: finalStatus === 'success' ? 100 : 0,
+                    step: finalStatus === 'success' ? 'Completed' : (isRunningButDead ? 'Interrupted (Server restarted)' : 'Failed'),
+                    error: isRunningButDead ? 'Build interrupted because the server restarted.' : (finalStatus === 'failed' ? 'Build failed' : null)
+                };
+            }
+        } catch (dbErr) {
+            console.error('Error fetching build status from DB:', dbErr);
+        }
+    }
+
     if (!build) {
         return res.status(404).json({ error: 'PWA generation task not found' });
     }
     
-    const packageUrl = build.status === 'success' ? `/api/pwa/download/${req.params.buildId}` : null;
+    const packageUrl = build.status === 'success' ? `/api/pwa/download/${buildId}` : null;
     res.json({
         buildId: build.id,
         status: build.status,
@@ -328,13 +349,35 @@ router.get('/build/status/:buildId', (req, res) => {
 });
 
 // GET /api/pwa/status/:buildId (Alias requested by user)
-router.get('/status/:buildId', (req, res) => {
-    const build = pwaService.getBuildStatus(req.params.buildId);
+router.get('/status/:buildId', async (req, res) => {
+    const buildId = req.params.buildId;
+    let build = pwaService.getBuildStatus(buildId);
+    
+    if (!build) {
+        try {
+            const dbResult = await pool.query('SELECT status, apk_url FROM app_builds WHERE id = $1', [buildId]);
+            if (dbResult.rows.length > 0) {
+                const dbBuild = dbResult.rows[0];
+                const isRunningButDead = dbBuild.status === 'running';
+                const finalStatus = isRunningButDead ? 'failed' : dbBuild.status;
+                build = {
+                    id: buildId,
+                    status: finalStatus,
+                    progress: finalStatus === 'success' ? 100 : 0,
+                    step: finalStatus === 'success' ? 'Completed' : (isRunningButDead ? 'Interrupted (Server restarted)' : 'Failed'),
+                    error: isRunningButDead ? 'Build interrupted because the server restarted.' : (finalStatus === 'failed' ? 'Build failed' : null)
+                };
+            }
+        } catch (dbErr) {
+            console.error('Error fetching build status from DB:', dbErr);
+        }
+    }
+
     if (!build) {
         return res.status(404).json({ error: 'PWA generation task not found' });
     }
     
-    const packageUrl = build.status === 'success' ? `/api/pwa/download/${req.params.buildId}` : null;
+    const packageUrl = build.status === 'success' ? `/api/pwa/download/${buildId}` : null;
     res.json({
         buildId: build.id,
         status: build.status,
@@ -346,51 +389,51 @@ router.get('/status/:buildId', (req, res) => {
 });
 
 // GET /api/pwa/build/logs/:buildId
-router.get('/build/logs/:buildId', (req, res) => {
-    const logs = pwaService.getBuildLogs(req.params.buildId);
+router.get('/build/logs/:buildId', async (req, res) => {
+    const buildId = req.params.buildId;
+    let logs = pwaService.getBuildLogs(buildId);
+    
+    if (!logs) {
+        try {
+            const dbResult = await pool.query('SELECT status FROM app_builds WHERE id = $1', [buildId]);
+            if (dbResult.rows.length > 0) {
+                const status = dbResult.rows[0].status;
+                logs = [
+                    `[System] Build status in database: ${status.toUpperCase()}`,
+                    `[System] Full compiler trace is unavailable (server restarted).`
+                ];
+            }
+        } catch (dbErr) {
+            console.error('Error fetching logs fallback from DB:', dbErr);
+        }
+    }
+
     if (!logs) {
         return res.status(404).json({ error: 'Logs not found' });
     }
     res.json({
-        buildId: req.params.buildId,
+        buildId: buildId,
         logs: logs
     });
 });
 
 // GET /api/pwa/download/:buildId
-router.get('/download/:buildId', async (req, res) => {
+router.get('/download/:buildId', (req, res) => {
     const buildId = req.params.buildId;
+    const format = req.query.format || 'apk';
     const fs = require('fs');
     const path = require('path');
     
-    let packagePath = path.resolve(__dirname, `../../builds/${buildId}/app-release.apk`);
-    let extension = '.apk';
+    let extension = format === 'aab' ? '.aab' : '.apk';
+    let packagePath = path.resolve(__dirname, `../../builds/${buildId}/app-release${extension}`);
     
+    // Fallback if the requested format doesn't exist but the other one does
     if (!fs.existsSync(packagePath)) {
-        packagePath = path.resolve(__dirname, `../../builds/${buildId}/app-release.aab`);
-        extension = '.aab';
-    }
-    
-    // If not found on disk, try to restore from database storage
-    if (!fs.existsSync(packagePath)) {
-        try {
-            const dbRes = await pool.query(
-                'SELECT file_data FROM app_builds WHERE id = $1',
-                [buildId]
-            );
-            if (dbRes.rows.length > 0 && dbRes.rows[0].file_data) {
-                // Ensure directory exists
-                const dir = path.dirname(packagePath);
-                if (!fs.existsSync(dir)) {
-                    fs.mkdirSync(dir, { recursive: true });
-                }
-                
-                // Write buffer back to disk cache
-                fs.writeFileSync(packagePath, dbRes.rows[0].file_data);
-                console.log(`[RESTORED] Restored build ${buildId} from database to disk cache.`);
-            }
-        } catch (dbErr) {
-            console.error(`Failed to restore build ${buildId} from database:`, dbErr);
+        const altExt = extension === '.apk' ? '.aab' : '.apk';
+        const altPath = path.resolve(__dirname, `../../builds/${buildId}/app-release${altExt}`);
+        if (fs.existsSync(altPath)) {
+            packagePath = altPath;
+            extension = altExt;
         }
     }
     

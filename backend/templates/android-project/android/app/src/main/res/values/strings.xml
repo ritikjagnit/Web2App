@@ -4,4 +4,6 @@
     <string name="title_activity_main">App Weaver Template</string>
     <string name="package_name">com.appweaver.template</string>
     <string name="custom_url_scheme">com.appweaver.template</string>
+    <string name="show_bottom_nav">false</string>
+    <string name="custom_navigation_json">none</string>
 </resources>
