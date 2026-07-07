@@ -547,8 +547,114 @@ async function downloadAndProcessAssets(buildId, websiteUrl, htmlContent, output
     return { processedHtml, assetsList };
 }
 
+// Helper to upload base64 to tmpfiles.org and return a direct short URL
+function uploadBase64ToTmpFiles(base64Data, filename = 'icon.png') {
+    return new Promise((resolve, reject) => {
+        const https = require('https');
+        
+        // Strip base64 header if present
+        const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        let buffer;
+        if (matches && matches.length === 3) {
+            buffer = Buffer.from(matches[2], 'base64');
+        } else {
+            buffer = Buffer.from(base64Data, 'base64');
+        }
+
+        const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+        
+        const header = Buffer.concat([
+            Buffer.from(`--${boundary}\r\n`),
+            Buffer.from(`Content-Disposition: form-data; name="file"; filename="${filename}"\r\n`),
+            Buffer.from(`Content-Type: image/png\r\n\r\n`)
+        ]);
+        
+        const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+        
+        const body = Buffer.concat([header, buffer, footer]);
+
+        const options = {
+            hostname: 'tmpfiles.org',
+            port: 443,
+            path: '/api/v1/upload',
+            method: 'POST',
+            headers: {
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': body.length,
+                'User-Agent': 'NodeJS-App-Weaver'
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    if (json.status === 'success' && json.data && json.data.url) {
+                        const directUrl = json.data.url.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
+                        resolve(directUrl);
+                    } else {
+                        reject(new Error(`Failed to upload: ${data}`));
+                    }
+                } catch (e) {
+                    reject(new Error(`Invalid JSON response: ${data}`));
+                }
+            });
+        });
+
+        req.on('error', (err) => {
+            reject(err);
+        });
+
+        req.setTimeout(8000, () => {
+            req.destroy(new Error("Upload to tmpfiles.org timed out"));
+        });
+
+        req.write(body);
+        req.end();
+    });
+}
+
+// Recursive helper to find and replace all base64 data URLs in an object/array
+async function processBase64InPayload(obj) {
+    if (typeof obj !== 'object' || obj === null) {
+        return obj;
+    }
+
+    if (Array.isArray(obj)) {
+        for (let i = 0; i < obj.length; i++) {
+            obj[i] = await processBase64InPayload(obj[i]);
+        }
+        return obj;
+    }
+
+    for (const key in obj) {
+        if (typeof obj[key] === 'string' && obj[key].startsWith('data:') && obj[key].includes(';base64,')) {
+            console.log(`[GitHub Build Helper] Found large base64 data in field '${key}'. Uploading to tmpfiles.org...`);
+            try {
+                const shortUrl = await uploadBase64ToTmpFiles(obj[key], `${key}_${Date.now()}.png`);
+                console.log(`[GitHub Build Helper] Successfully replaced base64 field '${key}' with short URL: ${shortUrl}`);
+                obj[key] = shortUrl;
+            } catch (err) {
+                console.error(`[GitHub Build Helper] Failed to upload base64 field '${key}' to tmpfiles.org:`, err.message);
+            }
+        } else {
+            obj[key] = await processBase64InPayload(obj[key]);
+        }
+    }
+    return obj;
+}
+
 // Helper to trigger GitHub Actions Android build
-function triggerGitHubBuild(payload) {
+async function triggerGitHubBuild(payload) {
+    // Process base64 URLs in payload to avoid exceeding the 64KB dispatch limit
+    try {
+        payload = await processBase64InPayload(payload);
+    } catch (e) {
+        console.error("Failed to process base64 payloads:", e);
+    }
+
     return new Promise((resolve, reject) => {
         const https = require('https');
         const owner = process.env.GITHUB_OWNER;
