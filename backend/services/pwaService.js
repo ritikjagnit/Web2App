@@ -761,7 +761,9 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
                     cacheStrategy,
                     androidBuildFormat,
                     websiteUrl,
-                    callbackUrl
+                    callbackUrl,
+                    includeBottomNav,
+                    customNavigation
                 }
             });
 

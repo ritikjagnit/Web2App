@@ -5,15 +5,39 @@ const Jimp = require('jimp');
 const https = require('https');
 const http = require('http');
 
-const buildId = process.env.BUILD_ID;
-const appName = process.env.APP_NAME || 'My PWA App';
-const shortName = process.env.SHORT_NAME || appName;
-const themeColor = process.env.THEME_COLOR || '#7c3aed';
-const backgroundColor = process.env.BACKGROUND_COLOR || '#ffffff';
-const sourceType = process.env.SOURCE_TYPE || 'url';
-const htmlContent = process.env.HTML_CONTENT || '';
-const iconUrl = process.env.ICON_URL || '';
-const websiteUrl = process.env.WEBSITE_URL || '';
+let buildId = process.env.BUILD_ID;
+let appName = process.env.APP_NAME || 'My PWA App';
+let shortName = process.env.SHORT_NAME || appName;
+let themeColor = process.env.THEME_COLOR || '#7c3aed';
+let backgroundColor = process.env.BACKGROUND_COLOR || '#ffffff';
+let sourceType = process.env.SOURCE_TYPE || 'url';
+let htmlContent = process.env.HTML_CONTENT || '';
+let iconUrl = process.env.ICON_URL || '';
+let websiteUrl = process.env.WEBSITE_URL || '';
+let includeBottomNav = false;
+let customNavigation = [];
+
+const eventPath = process.env.GITHUB_EVENT_PATH;
+if (eventPath && fs.existsSync(eventPath)) {
+    try {
+        const eventData = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
+        const payload = eventData.client_payload || {};
+        buildId = payload.buildId || buildId;
+        const config = payload.config || {};
+        appName = config.appName || appName;
+        shortName = config.shortName || shortName;
+        themeColor = config.themeColor || themeColor;
+        backgroundColor = config.backgroundColor || backgroundColor;
+        sourceType = config.sourceType || sourceType;
+        htmlContent = config.htmlContent || htmlContent;
+        iconUrl = config.iconUrl || iconUrl;
+        websiteUrl = config.websiteUrl || websiteUrl;
+        includeBottomNav = config.includeBottomNav === true || config.includeBottomNav === 'true';
+        customNavigation = config.customNavigation || [];
+    } catch (err) {
+        console.error("Failed to parse GitHub event JSON:", err);
+    }
+}
 
 const projectRootDir = path.resolve(__dirname, '../..');
 const workspaceDir = path.join(projectRootDir, `output/workspace/${buildId}`);
@@ -99,6 +123,60 @@ async function run() {
         fs.writeFileSync(capConfigPath, capConfig, 'utf8');
         console.log("Capacitor config customized successfully.");
 
+        // Process custom navigation tabs
+        let processedNavigation = [];
+        if (includeBottomNav && Array.isArray(customNavigation) && customNavigation.length > 0) {
+            for (let i = 0; i < customNavigation.length; i++) {
+                const item = customNavigation[i];
+                let iconValue = item.icon || 'home';
+                
+                if (iconValue) {
+                    if (iconValue.startsWith('http://') || iconValue.startsWith('https://')) {
+                        try {
+                            const drawableName = `custom_icon_${i}`;
+                            const destPath = path.join(workspaceDir, `android/app/src/main/res/drawable/${drawableName}.png`);
+                            console.log(`Downloading custom tab icon ${i} from: ${iconValue}`);
+                            await downloadFile(iconValue, destPath);
+                            iconValue = drawableName;
+                        } catch (err) {
+                            console.error(`Failed to download custom tab icon ${i}:`, err);
+                            iconValue = 'home';
+                        }
+                    } else if (iconValue.startsWith('data:image/')) {
+                        try {
+                            const matches = iconValue.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+                            if (matches && matches.length === 3) {
+                                const base64Data = matches[2];
+                                const buffer = Buffer.from(base64Data, 'base64');
+                                const drawableName = `custom_icon_${i}`;
+                                const iconPath = path.join(workspaceDir, `android/app/src/main/res/drawable/${drawableName}.png`);
+                                fs.writeFileSync(iconPath, buffer);
+                                iconValue = drawableName;
+                                console.log(`Decoded custom navigation icon for tab ${i}`);
+                            }
+                        } catch (err) {
+                            console.error('Failed to write custom navigation icon:', err);
+                            iconValue = 'home';
+                        }
+                    }
+                }
+                
+                processedNavigation.push({
+                    label: item.label || '',
+                    url: item.url || '',
+                    icon: iconValue
+                });
+            }
+        }
+
+        const navJsonString = processedNavigation.length > 0 
+            ? JSON.stringify(processedNavigation)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '\\"')
+            : 'none';
+
         // Update strings.xml
         const stringsXmlPath = path.join(workspaceDir, 'android/app/src/main/res/values/strings.xml');
         let stringsXml = fs.readFileSync(stringsXmlPath, 'utf8');
@@ -106,6 +184,8 @@ async function run() {
         stringsXml = stringsXml.replace(/<string name="title_activity_main">[^<]+<\/string>/g, `<string name="title_activity_main">${appName}</string>`);
         stringsXml = stringsXml.replace(/<string name="package_name">[^<]+<\/string>/g, `<string name="package_name">${packageName}</string>`);
         stringsXml = stringsXml.replace(/<string name="custom_url_scheme">[^<]+<\/string>/g, `<string name="custom_url_scheme">${packageName}</string>`);
+        stringsXml = stringsXml.replace(/<string name="show_bottom_nav">[^<]+<\/string>/g, `<string name="show_bottom_nav">${includeBottomNav ? 'true' : 'false'}</string>`);
+        stringsXml = stringsXml.replace(/<string name="custom_navigation_json">[^<]+<\/string>/g, `<string name="custom_navigation_json">${navJsonString}</string>`);
         fs.writeFileSync(stringsXmlPath, stringsXml, 'utf8');
 
         // Update build.gradle
