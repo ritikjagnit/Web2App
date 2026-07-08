@@ -433,13 +433,18 @@ router.get('/download/:buildId', (req, res) => {
     
     // Fallback if the requested format doesn't exist but another format does
     if (!fs.existsSync(packagePath)) {
-        const candidates = ['.apk', '.aab', '.ipa'];
-        for (const ext of candidates) {
-            const altPath = path.resolve(__dirname, `../../builds/${buildId}/app-release${ext}`);
-            if (fs.existsSync(altPath)) {
-                packagePath = altPath;
-                extension = ext;
-                break;
+        if (format === 'ipa') {
+            // No fallback for iOS packages
+        } else {
+            // Android formats can fallback to each other
+            const candidates = format === 'apk' ? ['.aab'] : ['.apk'];
+            for (const ext of candidates) {
+                const altPath = path.resolve(__dirname, `../../builds/${buildId}/app-release${ext}`);
+                if (fs.existsSync(altPath)) {
+                    packagePath = altPath;
+                    extension = ext;
+                    break;
+                }
             }
         }
     }
@@ -448,7 +453,7 @@ router.get('/download/:buildId', (req, res) => {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        return res.status(404).json({ error: 'Android package is not ready or compilation failed' });
+        return res.status(404).json({ error: `${format.toUpperCase()} package is not ready or compilation failed` });
     }
     
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
