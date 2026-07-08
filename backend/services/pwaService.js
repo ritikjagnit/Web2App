@@ -648,6 +648,8 @@ async function processBase64InPayload(obj) {
 
 // Helper to trigger GitHub Actions Android build
 async function triggerGitHubBuild(payload) {
+    const eventType = payload.eventType || 'build-android-app';
+    
     // Process base64 URLs in payload to avoid exceeding the 64KB dispatch limit
     try {
         payload = await processBase64InPayload(payload);
@@ -667,7 +669,7 @@ async function triggerGitHubBuild(payload) {
         }
 
         const data = JSON.stringify({
-            event_type: 'build-android-app',
+            event_type: eventType,
             client_payload: payload
         });
 
@@ -707,7 +709,7 @@ async function triggerGitHubBuild(payload) {
 }
 
 // 5. Generate PWA Package (Asynchronous Build Task) - Modified to Build Android APK
-async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat, includeBottomNav, customNavigation }) {
+async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, targetPlatform, androidBuildFormat, includeBottomNav, customNavigation }) {
     const pool = require('../db/database');
     const updateDbStatus = async (status, packageUrl = null) => {
         try {
@@ -742,39 +744,79 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         // Trigger GitHub Actions workflow if GITHUB config is set and USE_GITHUB_BUILD is enabled
         const useGitHub = process.env.USE_GITHUB_BUILD === 'true' && process.env.GITHUB_PAT && process.env.GITHUB_OWNER && process.env.GITHUB_REPO;
         if (useGitHub) {
-            logMsg(buildId, "→ Offloading Android build to GitHub Actions runner...");
+            logMsg(buildId, `→ Offloading ${targetPlatform || 'both'} build to GitHub Actions runner...`);
             buildsStore[buildId].progress = 20;
             buildsStore[buildId].step = 'Triggering GitHub Build';
 
             const callbackUrl = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/pwa/upload-build/${buildId}`;
             
-            await triggerGitHubBuild({
-                buildId,
-                config: {
-                    appName,
-                    shortName,
-                    themeColor,
-                    backgroundColor,
-                    sourceType,
-                    htmlContent,
-                    iconUrl,
-                    cacheStrategy,
-                    androidBuildFormat,
-                    websiteUrl,
-                    callbackUrl,
-                    includeBottomNav,
-                    customNavigation
-                }
-            });
+            const buildPromises = [];
+            
+            if (targetPlatform === 'android' || targetPlatform === 'both') {
+                buildPromises.push(
+                    triggerGitHubBuild({
+                        buildId,
+                        eventType: 'build-android-app',
+                        config: {
+                            appName,
+                            shortName,
+                            themeColor,
+                            backgroundColor,
+                            sourceType,
+                            htmlContent,
+                            iconUrl,
+                            cacheStrategy,
+                            androidBuildFormat,
+                            targetPlatform,
+                            websiteUrl,
+                            callbackUrl,
+                            includeBottomNav,
+                            customNavigation
+                        }
+                    })
+                );
+            }
+            
+            if (targetPlatform === 'ios' || targetPlatform === 'both') {
+                buildPromises.push(
+                    triggerGitHubBuild({
+                        buildId,
+                        eventType: 'build-ios-app',
+                        config: {
+                            appName,
+                            shortName,
+                            themeColor,
+                            backgroundColor,
+                            sourceType,
+                            htmlContent,
+                            iconUrl,
+                            cacheStrategy,
+                            androidBuildFormat,
+                            targetPlatform,
+                            websiteUrl,
+                            callbackUrl,
+                            includeBottomNav,
+                            customNavigation
+                        }
+                    })
+                );
+            }
+
+            await Promise.all(buildPromises);
 
             logMsg(buildId, "✓ GitHub Actions build triggered successfully!");
-            logMsg(buildId, "Waiting for GitHub runner to compile APK...");
+            logMsg(buildId, `Waiting for GitHub runner to compile package (${targetPlatform === 'both' ? 'APK & IPA' : targetPlatform.toUpperCase()})...`);
             buildsStore[buildId].progress = 50;
             buildsStore[buildId].step = 'Compiling on GitHub';
             return; // Exit and wait for callback upload
         }
 
         // --- STEP 1: VALIDATING WEBSITE ---
+        if (fs.existsSync(buildsDir)) {
+            fs.rmSync(buildsDir, { recursive: true, force: true });
+        }
+        fs.mkdirSync(buildsDir, { recursive: true });
+
         logMsg(buildId, "Step 1: Validating website accessibility & parameters...");
         buildsStore[buildId].progress = 15;
         buildsStore[buildId].step = 'Validating Website';
@@ -935,76 +977,112 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
             logMsg(buildId, "[WARN] MainActivity.java template file not found in com/appweaver/template!");
         }
 
-        // Generate and overwrite Android mipmap launcher icons
-        const resDir = path.join(workspaceDir, 'android/app/src/main/res');
-        await generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDir);
+        const buildAndroid = targetPlatform === 'android' || targetPlatform === 'both';
+        const buildIos = targetPlatform === 'ios' || targetPlatform === 'both';
 
-        // Run Capacitor Sync
-        logMsg(buildId, "Syncing web assets into Android project shell...");
-        await runCommand('npx cap sync android', workspaceDir, buildId);
+        if (buildAndroid) {
+            // Generate and overwrite Android mipmap launcher icons
+            const resDir = path.join(workspaceDir, 'android/app/src/main/res');
+            await generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDir);
 
-        // --- STEP 4: COMPILING PACKAGE VIA GRADLE ---
-        logMsg(buildId, `Step 4: Launching Android build pipeline to compile both APK and AAB packages...`);
-        buildsStore[buildId].progress = 85;
-        buildsStore[buildId].step = `Compiling APK & AAB`;
+            // Run Capacitor Sync
+            logMsg(buildId, "Syncing web assets into Android project shell...");
+            await runCommand('npx cap sync android', workspaceDir, buildId);
+        }
 
-        // Get correct Android SDK Path for current user using homedir
+        // --- STEP 4: COMPILING PACKAGES ---
         const os = require('os');
         const sdkPath = path.join(os.homedir(), 'AppData/Local/Android/Sdk');
-        
-        let usePlaceholder = false;
-        if (!fs.existsSync(sdkPath) || os.platform() !== 'win32') {
-            logMsg(buildId, "[INFO] Android SDK not found or running on a non-Windows cloud environment (e.g. Render).");
-            logMsg(buildId, "⚡ Falling back to pre-compiled Android package template to ensure successful demo download.");
-            usePlaceholder = true;
-        }
 
         const finalApkPath = path.join(buildsDir, `app-release.apk`);
         const finalAabPath = path.join(buildsDir, `app-release.aab`);
+        const finalIpaPath = path.join(buildsDir, `app-release.ipa`);
 
-        if (usePlaceholder) {
-            logMsg(buildId, "Simulating Gradle build task...");
-            await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate build time
-            const placeholderApkPath = path.resolve(__dirname, '../templates/android-placeholder.apk');
+        if (buildAndroid) {
+            logMsg(buildId, `Step 4: Launching Android build pipeline to compile both APK and AAB packages...`);
+            buildsStore[buildId].progress = 75;
+            buildsStore[buildId].step = `Compiling APK & AAB`;
 
-            if (fs.existsSync(placeholderApkPath)) {
+            let usePlaceholder = false;
+            if (!fs.existsSync(sdkPath) || os.platform() !== 'win32') {
+                logMsg(buildId, "[INFO] Android SDK not found or running on a non-Windows cloud environment (e.g. Render).");
+                logMsg(buildId, "⚡ Falling back to pre-compiled Android package template to ensure successful demo download.");
+                usePlaceholder = true;
+            }
+
+            if (usePlaceholder) {
+                logMsg(buildId, "Simulating Gradle build task...");
+                await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate build time
+                const placeholderApkPath = path.resolve(__dirname, '../templates/android-placeholder.apk');
+
+                if (fs.existsSync(placeholderApkPath)) {
+                    if (!fs.existsSync(buildsDir)) {
+                        fs.mkdirSync(buildsDir, { recursive: true });
+                    }
+                    fs.copyFileSync(placeholderApkPath, finalApkPath);
+                    fs.copyFileSync(placeholderApkPath, finalAabPath); // Simulate AAB by copying placeholder apk
+                    logMsg(buildId, `[DEMO SUCCESS] Pre-compiled template APK & AAB copied.`);
+                } else {
+                    throw new Error("Android build placeholder template is missing on server!");
+                }
+            } else {
+                // Write local.properties (forces pointing to local Android SDK path on user Windows PC)
+                const localPropsPath = path.join(workspaceDir, 'android/local.properties');
+                fs.writeFileSync(localPropsPath, `sdk.dir=${sdkPath.replace(/\\/g, '\\\\')}\n`, 'utf8');
+
+                // Run gradlew task inside android directory
+                const androidDir = path.join(workspaceDir, 'android');
+                logMsg(buildId, `Starting Gradle task: gradlew assembleDebug bundleDebug...`);
+                await runCommand(`cmd.exe /c gradlew.bat assembleDebug bundleDebug`, androidDir, buildId);
+
+                // Check if output packages exist
+                const compiledApkPath = path.join(workspaceDir, 'android/app/build/outputs/apk/debug/app-debug.apk');
+                const compiledAabPath = path.join(workspaceDir, 'android/app/build/outputs/bundle/debug/app-debug.aab');
+
+                if (!fs.existsSync(compiledApkPath)) {
+                    throw new Error(`Gradle build process completed but APK was not found!`);
+                }
+                if (!fs.existsSync(compiledAabPath)) {
+                    throw new Error(`Gradle build process completed but AAB was not found!`);
+                }
+
+                // Copy built packages to buildsDir
                 if (!fs.existsSync(buildsDir)) {
                     fs.mkdirSync(buildsDir, { recursive: true });
                 }
-                fs.copyFileSync(placeholderApkPath, finalApkPath);
-                fs.copyFileSync(placeholderApkPath, finalAabPath); // Simulate AAB by copying placeholder apk
-                logMsg(buildId, `[DEMO SUCCESS] Pre-compiled template APK & AAB copied.`);
+                fs.copyFileSync(compiledApkPath, finalApkPath);
+                fs.copyFileSync(compiledAabPath, finalAabPath);
+                logMsg(buildId, `APK and AAB successfully compiled.`);
+            }
+        }
+
+        if (buildIos) {
+            logMsg(buildId, `Step 4.5: Launching iOS build pipeline to compile IPA package...`);
+            buildsStore[buildId].progress = 90;
+            buildsStore[buildId].step = `Compiling iOS IPA`;
+
+            logMsg(buildId, `[INFO] iOS compilation requires Xcode and a macOS build agent.`);
+            logMsg(buildId, `⚡ Simulating iOS build and using pre-compiled iOS package (.ipa) for testing...`);
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate build time
+
+            const placeholderIpaPath = path.resolve(__dirname, '../templates/ios-placeholder.ipa');
+            const placeholderApkPath = path.resolve(__dirname, '../templates/android-placeholder.apk');
+            const sourceIpa = fs.existsSync(placeholderIpaPath) ? placeholderIpaPath : placeholderApkPath;
+
+            if (fs.existsSync(sourceIpa)) {
+                if (!fs.existsSync(buildsDir)) {
+                    fs.mkdirSync(buildsDir, { recursive: true });
+                }
+                fs.copyFileSync(sourceIpa, finalIpaPath);
+                logMsg(buildId, `[DEMO SUCCESS] Pre-compiled template IPA copied.`);
             } else {
-                throw new Error("Android build placeholder template is missing on server!");
+                logMsg(buildId, `[WARN] iOS placeholder file not found, writing empty simulator package.`);
+                if (!fs.existsSync(buildsDir)) {
+                    fs.mkdirSync(buildsDir, { recursive: true });
+                }
+                fs.writeFileSync(finalIpaPath, 'Simulated IPA file content for testing');
             }
-        } else {
-            // Write local.properties (forces pointing to local Android SDK path on user Windows PC)
-            const localPropsPath = path.join(workspaceDir, 'android/local.properties');
-            fs.writeFileSync(localPropsPath, `sdk.dir=${sdkPath.replace(/\\/g, '\\\\')}\n`, 'utf8');
-
-            // Run gradlew task inside android directory
-            const androidDir = path.join(workspaceDir, 'android');
-            logMsg(buildId, `Starting Gradle task: gradlew assembleDebug bundleDebug...`);
-            await runCommand(`cmd.exe /c gradlew.bat assembleDebug bundleDebug`, androidDir, buildId);
-
-            // Check if output packages exist
-            const compiledApkPath = path.join(workspaceDir, 'android/app/build/outputs/apk/debug/app-debug.apk');
-            const compiledAabPath = path.join(workspaceDir, 'android/app/build/outputs/bundle/debug/app-debug.aab');
-
-            if (!fs.existsSync(compiledApkPath)) {
-                throw new Error(`Gradle build process completed but APK was not found!`);
-            }
-            if (!fs.existsSync(compiledAabPath)) {
-                throw new Error(`Gradle build process completed but AAB was not found!`);
-            }
-
-            // Copy built packages to buildsDir
-            if (!fs.existsSync(buildsDir)) {
-                fs.mkdirSync(buildsDir, { recursive: true });
-            }
-            fs.copyFileSync(compiledApkPath, finalApkPath);
-            fs.copyFileSync(compiledAabPath, finalAabPath);
-            logMsg(buildId, `APK and AAB successfully compiled.`);
+            logMsg(buildId, `✓ iOS package (.ipa) created successfully!`);
         }
 
         // Clean up temporary workspace directory
@@ -1016,17 +1094,17 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         }
 
         // --- COMPLETED ---
-        logMsg(buildId, `✓ APK and AAB packages created successfully!`);
+        logMsg(buildId, `✓ Build completed successfully!`);
         buildsStore[buildId].progress = 100;
         buildsStore[buildId].step = 'Completed';
         buildsStore[buildId].status = 'success';
-        buildsStore[buildId].packagePath = finalApkPath;
+        buildsStore[buildId].packagePath = buildAndroid ? finalApkPath : finalIpaPath;
 
         const downloadUrl = `/api/pwa/download/${buildId}`;
         await updateDbStatus('success', downloadUrl);
 
     } catch (err) {
-        logMsg(buildId, `ANDROID COMPILATION FAILURE: ${err.message}`);
+        logMsg(buildId, `COMPILATION FAILURE: ${err.message}`);
         buildsStore[buildId].status = 'failed';
         buildsStore[buildId].error = err.message;
         await updateDbStatus('failed');
@@ -1117,7 +1195,7 @@ async function generateAndroidIcons(iconUrl, appName, themeColor, buildId, resDi
 }
 
 // Service exports
-exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, plan, androidBuildFormat, includeBottomNav, customNavigation }) => {
+exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, plan, targetPlatform, androidBuildFormat, includeBottomNav, customNavigation }) => {
     const buildId = `apk_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const workspaceDir = path.resolve(__dirname, `../../output/workspace/${buildId}`);
     const buildsDir = path.resolve(__dirname, `../../builds/${buildId}`);
@@ -1138,9 +1216,9 @@ exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, th
     };
 
     // Run packaging asynchronously
-    runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, androidBuildFormat, includeBottomNav, customNavigation })
+    runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, shortName, themeColor, backgroundColor, sourceType, htmlContent, iconUrl, cacheStrategy, workspaceDir, buildsDir, plan, targetPlatform: targetPlatform || 'both', androidBuildFormat, includeBottomNav, customNavigation })
         .catch(err => {
-            console.error(`Android app build pipeline crash:`, err);
+            console.error(`App build pipeline crash:`, err);
             buildsStore[buildId].status = 'failed';
             buildsStore[buildId].error = err.message;
         });

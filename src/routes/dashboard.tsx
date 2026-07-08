@@ -305,12 +305,12 @@ function DashboardPage() {
     }
   };
 
-  const handlePwaDownload = async (app: App, formatOverride?: "apk" | "aab") => {
+  const handlePwaDownload = async (app: App, formatOverride?: "apk" | "aab" | "ipa") => {
     if (!app.apk_url) return;
     const format = formatOverride || (app.android_build_format === "aab" ? "aab" : "apk");
     const label = format.toUpperCase();
     try {
-      toast.info(`Downloading Android ${label}...`);
+      toast.info(`Downloading ${label}...`);
       const downloadUrl = app.apk_url.includes("?") 
         ? `${app.apk_url}&format=${format}` 
         : `${app.apk_url}?format=${format}`;
@@ -318,7 +318,7 @@ function DashboardPage() {
       const response = await fetch(downloadUrl);
       const blob = await response.blob();
 
-      const mimeType = format === "aab" ? "application/octet-stream" : "application/vnd.android.package-archive";
+      const mimeType = format === "aab" || format === "ipa" ? "application/octet-stream" : "application/vnd.android.package-archive";
       const fileBlob = new Blob([blob], { type: mimeType });
       const url = window.URL.createObjectURL(fileBlob);
       const link = document.createElement("a");
@@ -527,7 +527,9 @@ function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onDownload
                     <div>
                       <h4 className="text-xl font-bold flex flex-col sm:flex-row items-center gap-2 justify-center sm:justify-start">
                         {apps[0].name} 
-                        <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full shrink-0">{apps[0].android_build_format === 'aab' ? 'AAB Bundle' : 'APK Package'}</span>
+                        <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full shrink-0">
+                          {apps[0].target_platform === 'both' ? 'Dual Platform' : apps[0].target_platform === 'ios' ? 'iOS' : (apps[0].android_build_format === 'aab' ? 'AAB Bundle' : 'APK Package')}
+                        </span>
                       </h4>
                       <p className="text-sm text-muted-foreground mt-1">
                         {apps[0].website_url.startsWith("http") ? new URL(apps[0].website_url).hostname : "Local HTML Source"}
@@ -535,12 +537,21 @@ function FreeDashboard({ apps, loading, onDelete, onEdit, onDownload, onDownload
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto">
-                    <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(apps[0], "apk")}>
-                      <Download className="h-4 w-4 mr-2" /> Download APK
-                    </Button>
-                    <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownload(apps[0], "aab")}>
-                      <Download className="h-4 w-4 mr-2" /> Download AAB
-                    </Button>
+                    {apps[0].target_platform !== "ios" && (
+                      <>
+                        <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(apps[0], "apk")}>
+                          <Download className="h-4 w-4 mr-2" /> Download APK
+                        </Button>
+                        <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownload(apps[0], "aab")}>
+                          <Download className="h-4 w-4 mr-2" /> Download AAB
+                        </Button>
+                      </>
+                    )}
+                    {apps[0].target_platform !== "android" && (
+                      <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white" onClick={() => onDownload(apps[0], "ipa")}>
+                        <Download className="h-4 w-4 mr-2" /> Download IPA
+                      </Button>
+                    )}
                     <div className="flex gap-2 w-full sm:w-auto justify-center">
                       <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onPreview(apps[0])}><Eye className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onEdit(apps[0])}><Pencil className="h-4 w-4" /></Button>
@@ -643,21 +654,34 @@ function ProDashboard({ apps, activeBuilds, loading, onImport, onDelete, onEdit,
                         <div>
                           <h4 className="text-lg font-bold flex flex-col sm:flex-row items-center gap-2 justify-center sm:justify-start">
                             {app.name} 
-                            <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full shrink-0">PRO {app.android_build_format === 'aab' ? 'AAB' : 'APK'}</span>
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full shrink-0">
+                              PRO {app.target_platform === 'both' ? 'DUAL' : app.target_platform === 'ios' ? 'iOS' : app.android_build_format.toUpperCase()}
+                            </span>
                           </h4>
                           <div className="flex flex-col sm:flex-row items-center gap-2 mt-1.5 justify-center sm:justify-start">
-                            <p className="text-[10px] text-muted-foreground font-mono uppercase bg-white/5 px-2 py-0.5 rounded-md shrink-0">Android App</p>
+                            <p className="text-[10px] text-muted-foreground font-mono uppercase bg-white/5 px-2 py-0.5 rounded-md shrink-0">
+                              {app.target_platform === 'both' ? 'Android & iOS App' : app.target_platform === 'ios' ? 'iOS App' : 'Android App'}
+                            </p>
                             <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{app.website_url}</p>
                           </div>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto relative z-10">
-                        <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(app, "apk")}>
-                          <Download className="h-4 w-4 mr-2" /> Download APK
-                        </Button>
-                        <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownload(app, "aab")}>
-                          <Download className="h-4 w-4 mr-2" /> Download AAB
-                        </Button>
+                        {app.target_platform !== "ios" && (
+                          <>
+                            <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial" onClick={() => onDownload(app, "apk")}>
+                              <Download className="h-4 w-4 mr-2" /> Download APK
+                            </Button>
+                            <Button variant="outline" size="sm" className="hover:scale-105 transition-transform border-dashed flex-1 sm:flex-initial" onClick={() => onDownload(app, "aab")}>
+                              <Download className="h-4 w-4 mr-2" /> Download AAB
+                            </Button>
+                          </>
+                        )}
+                        {app.target_platform !== "android" && (
+                          <Button variant="secondary" size="sm" className="hover:scale-105 transition-transform flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white" onClick={() => onDownload(app, "ipa")}>
+                            <Download className="h-4 w-4 mr-2" /> Download IPA
+                          </Button>
+                        )}
                         <div className="flex gap-2 w-full sm:w-auto justify-center">
                           <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onPreview(app)}><Eye className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" className="hover:scale-105 transition-transform p-2" onClick={() => onEdit(app)}><Pencil className="h-4 w-4" /></Button>
@@ -1124,21 +1148,35 @@ function BusinessDashboard({ apps, activeBuilds, loading, onImport, onDelete, on
                         <div>
                           <div className="flex flex-col sm:flex-row items-center gap-3 mb-2 justify-center sm:justify-start">
                             <h4 className="text-2xl font-bold tracking-tighter text-foreground">{app.name}</h4>
-                            <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black px-2 py-0.5 rounded-md border border-amber-500/20 uppercase shadow-sm shrink-0">Enterprise {app.android_build_format === 'aab' ? 'AAB' : 'APK'}</span>
+                            <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black px-2 py-0.5 rounded-md border border-amber-500/20 uppercase shadow-sm shrink-0">
+                              Enterprise {app.target_platform === 'both' ? 'DUAL' : app.target_platform === 'ios' ? 'iOS' : app.android_build_format.toUpperCase()}
+                            </span>
                           </div>
                           <div className="flex flex-col sm:flex-row items-center gap-4 text-xs font-mono text-muted-foreground justify-center sm:justify-start">
                             <span className="flex items-center gap-1.5"><Globe className="h-3 w-3" /> {app.website_url.startsWith("http") ? new URL(app.website_url).hostname : "Local HTML Source"}</span>
+                            <span className="flex items-center gap-1.5">
+                              <Smartphone className="h-3 w-3" /> {app.target_platform === 'both' ? 'Android & iOS' : app.target_platform === 'ios' ? 'iOS Only' : 'Android Only'}
+                            </span>
                             <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> {new Date(app.created_at).toLocaleDateString()}</span>
                           </div>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto relative z-10">
-                        <Button className="rounded-xl h-10 px-4 bg-amber-500 text-white hover:bg-amber-600 font-bold shadow-lg shadow-amber-500/20 hover:scale-105 hover:shadow-amber-500/40 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app, "apk")}>
-                          <Download className="h-4 w-4 mr-2" /> Download APK
-                        </Button>
-                        <Button variant="outline" className="rounded-xl h-10 px-4 border-dashed border-amber-500/50 hover:bg-amber-500/10 hover:border-amber-500 font-bold hover:scale-105 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app, "aab")}>
-                          <Download className="h-4 w-4 mr-2" /> Download AAB
-                        </Button>
+                        {app.target_platform !== "ios" && (
+                          <>
+                            <Button className="rounded-xl h-10 px-4 bg-amber-500 text-white hover:bg-amber-600 font-bold shadow-lg shadow-amber-500/20 hover:scale-105 hover:shadow-amber-500/40 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app, "apk")}>
+                              <Download className="h-4 w-4 mr-2" /> Download APK
+                            </Button>
+                            <Button variant="outline" className="rounded-xl h-10 px-4 border-dashed border-amber-500/50 hover:bg-amber-500/10 hover:border-amber-500 font-bold hover:scale-105 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app, "aab")}>
+                              <Download className="h-4 w-4 mr-2" /> Download AAB
+                            </Button>
+                          </>
+                        )}
+                        {app.target_platform !== "android" && (
+                          <Button className="rounded-xl h-10 px-4 bg-blue-600 text-white hover:bg-blue-700 font-bold hover:scale-105 transition-all duration-300 flex-1 sm:flex-initial" onClick={() => onDownload(app, "ipa")}>
+                            <Download className="h-4 w-4 mr-2" /> Download IPA
+                          </Button>
+                        )}
                         <div className="flex gap-2 w-full sm:w-auto justify-center">
                           <Button variant="outline" className="h-10 w-10 p-0 rounded-xl border-border hover:bg-muted hover:scale-105 transition-all duration-300" onClick={() => onPreview(app)}><Eye className="h-4 w-4 text-foreground" /></Button>
                           <Button variant="outline" className="h-10 w-10 p-0 rounded-xl border-border hover:bg-muted hover:scale-105 transition-all duration-300" onClick={() => onEdit(app)}><Pencil className="h-4 w-4 text-foreground" /></Button>

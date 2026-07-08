@@ -1014,49 +1014,24 @@ function ConverterPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Target Platform</Label>
-                      <div className="flex gap-2">
-                        {[
-                          { id: "both", label: "Both" },
-                          { id: "android", label: "Android" },
-                          { id: "ios", label: "iOS" }
-                        ].map((p) => (
-                          <button 
-                            key={p.id} 
-                            type="button" 
-                            onClick={() => setTargetPlatform(p.id as any)} 
-                            className={`flex-1 flex items-center justify-center gap-1 h-10 rounded-lg border ${targetPlatform === p.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-[11px] font-medium`}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
+                   <div className="space-y-2">
+                    <Label>Target Platform</Label>
+                    <div className="flex gap-2">
+                      {[
+                        { id: "both", label: "Both (Android & iOS)" },
+                        { id: "android", label: "Android Only" },
+                        { id: "ios", label: "iOS Only" }
+                      ].map((p) => (
+                        <button 
+                          key={p.id} 
+                          type="button" 
+                          onClick={() => setTargetPlatform(p.id as any)} 
+                          className={`flex-1 flex items-center justify-center gap-1 h-10 rounded-lg border ${targetPlatform === p.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-xs font-medium`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
                     </div>
-                    {targetPlatform !== "ios" && (
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-1">
-                          Android Build Format
-                          <span className="text-[10px] text-muted-foreground font-normal">(AAB required for Play Store)</span>
-                        </Label>
-                        <div className="flex gap-2">
-                          {[
-                            { id: "apk", label: "APK (Local Test)" },
-                            { id: "aab", label: "AAB (Play Store)" }
-                          ].map((f) => (
-                            <button 
-                              key={f.id} 
-                              type="button" 
-                              onClick={() => setAndroidBuildFormat(f.id as any)} 
-                              className={`flex-1 flex items-center justify-center gap-1 h-10 rounded-lg border ${androidBuildFormat === f.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-transparent text-muted-foreground hover:bg-white/5"} transition-colors text-[11px] font-medium`}
-                            >
-                              {f.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1153,18 +1128,29 @@ function ConverterPage() {
                       <Sparkles className="h-5 w-5" /> Generate App Package
                     </Button>
 
-                    {downloadUrl && targetPlatform !== "ios" && (
-                      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
-                        <Button variant="outline" size="xl" className="flex-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20" asChild>
-                          <a href={`${downloadUrl}?format=apk`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.apk`}>
-                            <Download className="h-5 w-5 mr-2" /> Download APK
-                          </a>
-                        </Button>
-                        <Button variant="outline" size="xl" className="flex-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20" asChild>
-                          <a href={`${downloadUrl}?format=aab`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.aab`}>
-                            <Download className="h-5 w-5 mr-2" /> Download AAB
-                          </a>
-                        </Button>
+                    {downloadUrl && (
+                      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-3 w-full">
+                        {targetPlatform !== "ios" && (
+                          <div className="flex gap-3">
+                            <Button variant="outline" size="xl" className="flex-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20" asChild>
+                              <a href={`${downloadUrl}?format=apk`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.apk`}>
+                                <Download className="h-5 w-5 mr-2" /> Download APK
+                              </a>
+                            </Button>
+                            <Button variant="outline" size="xl" className="flex-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20" asChild>
+                              <a href={`${downloadUrl}?format=aab`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.aab`}>
+                                <Download className="h-5 w-5 mr-2" /> Download AAB
+                              </a>
+                            </Button>
+                          </div>
+                        )}
+                        {targetPlatform !== "android" && (
+                          <Button variant="outline" size="xl" className="w-full bg-blue-500/10 text-blue-600 border-blue-500/20 hover:bg-blue-500/20" asChild>
+                            <a href={`${downloadUrl}?format=ipa`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.ipa`}>
+                              <Download className="h-5 w-5 mr-2" /> Download IPA (iOS)
+                            </a>
+                          </Button>
+                        )}
                       </motion.div>
                     )}
                   </div>
@@ -1201,15 +1187,17 @@ function ConverterPage() {
                   </div>
 
                   {/* Checklist of generated assets */}
-                  <div className="bg-card border border-border rounded-2xl p-4 space-y-2.5 text-xs text-left">
-                    <div className="font-bold border-b border-border pb-2 text-foreground">APK Package Elements Compiled:</div>
+                   <div className="bg-card border border-border rounded-2xl p-4 space-y-2.5 text-xs text-left">
+                    <div className="font-bold border-b border-border pb-2 text-foreground">
+                      {targetPlatform === "both" ? "Android & iOS Package Elements Compiled:" : targetPlatform === "ios" ? "iOS IPA Package Elements Compiled:" : "Android APK Package Elements Compiled:"}
+                    </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                      <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> W3C Web App Manifest</div>
+                      <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> {targetPlatform === "ios" ? "Safari Web App Config" : "W3C Web App Manifest"}</div>
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> High-Resolution Brand Icons</div>
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Service Worker Offline Engine</div>
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Offline HTML Fallback Page</div>
                       <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Install-Ready Registration Guide</div>
-                      <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> Install-Ready App Package</div>
+                      <div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> {targetPlatform === "both" ? "APK, AAB & IPA Packages" : targetPlatform === "ios" ? "iOS IPA Package" : "Android APK/AAB Package"}</div>
                     </div>
                   </div>
 
@@ -1247,23 +1235,31 @@ function ConverterPage() {
                     )}
                   </Tabs>
 
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    {targetPlatform !== "ios" && (
-                      <>
-                        <Button variant="hero" className="flex-1 gap-2" asChild>
-                          <a href={`${downloadUrl}?format=apk`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.apk`}><Download className="h-4 w-4" /> Download APK</a>
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      {targetPlatform !== "ios" && (
+                        <>
+                          <Button variant="hero" className="flex-1 gap-2" asChild>
+                            <a href={`${downloadUrl}?format=apk`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.apk`}><Download className="h-4 w-4" /> Download APK</a>
+                          </Button>
+                          <Button variant="outline" className="flex-1 gap-2" asChild>
+                            <a href={`${downloadUrl}?format=aab`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.aab`}><Download className="h-4 w-4" /> Download AAB</a>
+                          </Button>
+                        </>
+                      )}
+                      {targetPlatform !== "android" && (
+                        <Button className="flex-1 gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold shadow-md shadow-blue-500/20 hover:scale-[1.02] hover:shadow-blue-500/30 transition-all h-10 px-5 py-2 rounded-md" asChild>
+                          <a href={`${downloadUrl}?format=ipa`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.ipa`}><Download className="h-4 w-4" /> Download IPA</a>
                         </Button>
-                        <Button variant="outline" className="flex-1 gap-2" asChild>
-                          <a href={`${downloadUrl}?format=aab`} download={`${appName.replace(/[^a-zA-Z0-9]/g, "_")}.aab`}><Download className="h-4 w-4" /> Download AAB</a>
-                        </Button>
-                      </>
-                    )}
-                    <Button variant="glass" className="flex-1" onClick={() => setStep("configure")}>Configure Another</Button>
-                  </div>
-                  <div className="text-center pt-2">
-                    <Button variant="link" className="text-xs text-primary" asChild>
-                      <Link to="/dashboard">Go to Projects Dashboard <ArrowRight className="h-3 w-3 ml-1" /></Link>
-                    </Button>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-4 border-t border-border/40">
+                      <Button variant="glass" className="w-full sm:w-auto px-6 text-xs" onClick={() => setStep("configure")}>Configure Another</Button>
+                      <Button variant="link" className="text-xs text-primary font-medium" asChild>
+                        <Link to="/dashboard">Go to Projects Dashboard <ArrowRight className="h-3 w-3 ml-1" /></Link>
+                      </Button>
+                    </div>
                   </div>
                 </motion.div>
               )}

@@ -100,6 +100,7 @@ router.post('/build', async (req, res) => {
         cacheStrategy,
         plan,
         android_build_format,
+        target_platform,
         include_bottom_nav,
         custom_navigation
     } = req.body;
@@ -148,6 +149,7 @@ router.post('/build', async (req, res) => {
             iconUrl: iconUrl,
             cacheStrategy: cacheStrategy || 'StaleWhileRevalidate',
             plan: plan || 'free',
+            targetPlatform: target_platform || 'both',
             androidBuildFormat: android_build_format || 'apk',
             includeBottomNav: include_bottom_nav === true,
             customNavigation: custom_navigation
@@ -194,6 +196,7 @@ router.post('/api-build', async (req, res) => {
             background_color,
             iconUrl,
             cacheStrategy,
+            target_platform,
             android_build_format
         } = req.body;
 
@@ -213,6 +216,7 @@ router.post('/api-build', async (req, res) => {
             iconUrl: iconUrl,
             cacheStrategy: cacheStrategy || 'StaleWhileRevalidate',
             plan: 'business',
+            targetPlatform: target_platform || 'both',
             androidBuildFormat: android_build_format || 'apk'
         });
 
@@ -242,7 +246,7 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-        const ext = file.originalname.endsWith('.aab') ? '.aab' : '.apk';
+        const ext = file.originalname.endsWith('.aab') ? '.aab' : (file.originalname.endsWith('.ipa') ? '.ipa' : '.apk');
         cb(null, `app-release${ext}`);
     }
 });
@@ -424,16 +428,19 @@ router.get('/download/:buildId', (req, res) => {
     const fs = require('fs');
     const path = require('path');
     
-    let extension = format === 'aab' ? '.aab' : '.apk';
+    let extension = format === 'aab' ? '.aab' : (format === 'ipa' ? '.ipa' : '.apk');
     let packagePath = path.resolve(__dirname, `../../builds/${buildId}/app-release${extension}`);
     
-    // Fallback if the requested format doesn't exist but the other one does
+    // Fallback if the requested format doesn't exist but another format does
     if (!fs.existsSync(packagePath)) {
-        const altExt = extension === '.apk' ? '.aab' : '.apk';
-        const altPath = path.resolve(__dirname, `../../builds/${buildId}/app-release${altExt}`);
-        if (fs.existsSync(altPath)) {
-            packagePath = altPath;
-            extension = altExt;
+        const candidates = ['.apk', '.aab', '.ipa'];
+        for (const ext of candidates) {
+            const altPath = path.resolve(__dirname, `../../builds/${buildId}/app-release${ext}`);
+            if (fs.existsSync(altPath)) {
+                packagePath = altPath;
+                extension = ext;
+                break;
+            }
         }
     }
     

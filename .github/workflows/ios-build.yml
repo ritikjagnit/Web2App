@@ -1,12 +1,12 @@
-name: Build Android APK/AAB
+name: Build iOS IPA
 
 on:
   repository_dispatch:
-    types: [build-android-app]
+    types: [build-ios-app]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Checkout Source Code
@@ -17,20 +17,11 @@ jobs:
         with:
           node-version: 18
 
-      - name: Setup Java JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Node Dependencies
         run: |
           cd backend && npm install
 
-      - name: Configure Android App Workspace
+      - name: Configure App Workspace
         env:
           BUILD_ID: ${{ github.event.client_payload.buildId }}
           APP_NAME: ${{ github.event.client_payload.config.appName }}
@@ -41,16 +32,27 @@ jobs:
           HTML_CONTENT: ${{ github.event.client_payload.config.htmlContent }}
           ICON_URL: ${{ github.event.client_payload.config.iconUrl }}
           CACHE_STRATEGY: ${{ github.event.client_payload.config.cacheStrategy }}
-          ANDROID_BUILD_FORMAT: ${{ github.event.client_payload.config.androidBuildFormat }}
           WEBSITE_URL: ${{ github.event.client_payload.config.websiteUrl }}
         run: |
           node backend/scripts/github-build-helper.js
 
-      - name: Build Android App (APK/AAB)
+      - name: Add and Sync iOS Platform
         run: |
-          cd output/workspace/${{ github.event.client_payload.buildId }}/android
-          chmod +x gradlew
-          ./gradlew assembleDebug bundleDebug
+          cd output/workspace/${{ github.event.client_payload.buildId }}
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Build iOS Xcode Project
+        run: |
+          cd output/workspace/${{ github.event.client_payload.buildId }}/ios/App
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=build-output
+
+      - name: Package App as IPA
+        run: |
+          cd output/workspace/${{ github.event.client_payload.buildId }}/ios/App
+          mkdir Payload
+          cp -r build-output/App.app Payload/
+          zip -r app-release.ipa Payload
 
       - name: Upload Package back to GoViralHost
         env:
@@ -58,20 +60,10 @@ jobs:
           CALLBACK_URL: ${{ github.event.client_payload.config.callbackUrl }}
           CALLBACK_SECRET: ${{ secrets.BUILD_CALLBACK_SECRET }}
         run: |
-          BUILD_DIR="output/workspace/${BUILD_ID}"
-          APK_FILE="${BUILD_DIR}/android/app/build/outputs/apk/debug/app-debug.apk"
-          AAB_FILE="${BUILD_DIR}/android/app/build/outputs/bundle/debug/app-debug.aab"
-          
-          echo "Uploading APK: $APK_FILE to $CALLBACK_URL..."
+          FILE_PATH="output/workspace/${BUILD_ID}/ios/App/app-release.ipa"
+          echo "Uploading $FILE_PATH to $CALLBACK_URL..."
           curl -X POST \
             -H "Authorization: Bearer ${CALLBACK_SECRET}" \
-            -F "file=@${APK_FILE}" \
-            -F "status=success" \
-            "${CALLBACK_URL}"
-            
-          echo "Uploading AAB: $AAB_FILE to $CALLBACK_URL..."
-          curl -X POST \
-            -H "Authorization: Bearer ${CALLBACK_SECRET}" \
-            -F "file=@${AAB_FILE}" \
+            -F "file=@${FILE_PATH}" \
             -F "status=success" \
             "${CALLBACK_URL}"
