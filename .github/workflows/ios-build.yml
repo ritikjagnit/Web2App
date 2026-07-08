@@ -33,6 +33,7 @@ jobs:
           ICON_URL: ${{ github.event.client_payload.config.iconUrl }}
           CACHE_STRATEGY: ${{ github.event.client_payload.config.cacheStrategy }}
           WEBSITE_URL: ${{ github.event.client_payload.config.websiteUrl }}
+          PLATFORM: ios
         run: |
           node backend/scripts/github-build-helper.js
 

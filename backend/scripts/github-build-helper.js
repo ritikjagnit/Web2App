@@ -220,11 +220,17 @@ async function run() {
         console.log("Installing Capacitor CLI and platform libraries in workspace...");
         execSync('npm install', { cwd: workspaceDir, stdio: 'inherit' });
 
-        // Run Capacitor Sync
-        console.log("Syncing web assets into Android project shell...");
-        execSync('npx cap sync android', { cwd: workspaceDir, stdio: 'inherit' });
+        const buildPlatform = process.env.PLATFORM || 'android';
+        if (buildPlatform === 'ios') {
+            console.log("Installing @capacitor/ios platform dependency...");
+            execSync('npm install @capacitor/ios', { cwd: workspaceDir, stdio: 'inherit' });
+        } else {
+            // Run Capacitor Sync
+            console.log("Syncing web assets into Android project shell...");
+            execSync('npx cap sync android', { cwd: workspaceDir, stdio: 'inherit' });
+        }
         
-        console.log("Configuration and Sync completed successfully.");
+        console.log("Configuration completed successfully.");
     } catch (err) {
         console.error("Configuration failed:", err);
         process.exit(1);
