@@ -482,6 +482,8 @@ function ConverterPage() {
       
       let finished = false;
       let finalZipUrl = "";
+      let hasError = false;
+      let errorMessage = "";
       
       while (!finished) {
         await new Promise((r) => setTimeout(r, 1200));
@@ -521,18 +523,31 @@ function ConverterPage() {
             finalZipUrl = `${backendUrl}/api/pwa/download/${backendBuildId}`;
           } else if (statusData.status === "failed") {
             finished = true;
-            throw new Error(statusData.error || "App pipeline failed on server");
+            hasError = true;
+            errorMessage = statusData.error || "App pipeline failed on server";
           }
         } catch (pollErr) {
           console.warn("Backend temporarily unreachable while polling status", pollErr);
         }
       }
 
+      if (hasError) {
+        try {
+          await supabase.from("builds").update({
+            status: "failed",
+            finished_at: new Date().toISOString(),
+            log: `❌ Compilation failed: ${errorMessage}`,
+          }).eq("id", build.id);
+          await supabase.from("apps").update({ status: "failed" }).eq("id", app.id);
+        } catch (e) {}
+        throw new Error(errorMessage);
+      }
+
       // Update status and url in database
       await supabase.from("apps").update({ status: "ready", apk_url: finalZipUrl }).eq("id", app.id);
 
       const buildNameStr = targetPlatform === "both" ? "Android & iOS" : targetPlatform === "ios" ? "iOS" : "Android";
-      const completionLog = `✓ ${buildNameStr} ${androidBuildFormat.toUpperCase()} package compiled successfully!`;
+      const completionLog = `✓ ${buildNameStr} package compiled successfully!`;
       await supabase.from("builds").update({
         status: "success",
         progress: 100,
@@ -541,11 +556,11 @@ function ConverterPage() {
         log: completionLog,
       }).eq("id", build.id);
 
-      setLogs((prev) => [...prev, completionLog, `→ Download ${androidBuildFormat.toUpperCase()}: ${finalZipUrl}`]);
+      setLogs((prev) => [...prev, completionLog, `→ Download: ${finalZipUrl}`]);
       setAppId(app.id);
       setDownloadUrl(finalZipUrl);
       setStep("done");
-      toast.success(`${buildNameStr} ${androidBuildFormat.toUpperCase()} generated successfully!`);
+      toast.success(`${buildNameStr} generated successfully!`);
     } catch (err: any) {
       toast.error(err.message ?? "APK Generation failed");
       setStep("configure");
