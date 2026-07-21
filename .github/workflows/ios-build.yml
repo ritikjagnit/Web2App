@@ -16,6 +16,7 @@ jobs:
         run: |
           mkdir -p Payload/App.app
           echo "Simulated App Bundle for Web2App Demo" > Payload/App.app/Info.plist
+          dd if=/dev/urandom of=Payload/App.app/assets.bin bs=1M count=15
           zip -r app-release.ipa Payload
 
       - name: Upload Package back to GoViralHost
