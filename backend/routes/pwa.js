@@ -288,7 +288,7 @@ router.post('/upload-build/:buildId', upload.single('file'), async (req, res) =>
             if (build) {
                 targetPlatform = build.targetPlatform || 'both';
                 if (isAndroid) build.androidStatus = 'success';
-                if (isIos) build.iosStatus = 'success';
+                if (isIpa) build.iosStatus = 'success';
                 
                 isAndroidReady = (build.androidStatus === 'success' || build.androidStatus === 'none');
                 isIosReady = (build.iosStatus === 'success' || build.iosStatus === 'none');
@@ -301,7 +301,7 @@ router.post('/upload-build/:buildId', upload.single('file'), async (req, res) =>
                 if (isAndroid) {
                     isAndroidReady = true;
                     isIosReady = hasIpa;
-                } else if (isIos) {
+                } else if (isIpa) {
                     isIosReady = true;
                     isAndroidReady = hasApk;
                 }
@@ -309,7 +309,7 @@ router.post('/upload-build/:buildId', upload.single('file'), async (req, res) =>
 
             // If we are building both and the other one is not ready yet, keep the build status as 'running'
             const bothPlatforms = (targetPlatform === 'both');
-            const otherPending = bothPlatforms && ((isAndroid && !isIosReady) || (isIos && !isAndroidReady));
+            const otherPending = bothPlatforms && ((isAndroid && !isIosReady) || (isIpa && !isAndroidReady));
 
             if (otherPending) {
                 const pendingMsg = isAndroid ? 'Android build compiled. Waiting for iOS compilation...' : 'iOS build compiled. Waiting for Android compilation...';
