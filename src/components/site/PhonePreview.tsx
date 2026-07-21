@@ -175,11 +175,13 @@ export function PhonePreview({ url, appName = "Your App", themeColor = "#7c3aed"
                   key={iframeKey}
                   ref={iframeRef}
                   src={url}
-                  className="w-full h-full border-0 pointer-events-auto"
+                  className="border-0 pointer-events-auto"
                   title="webview-preview"
                   onLoad={handleIframeLoad}
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                   style={{
+                    width: "calc(100% + 12px)",
+                    height: "calc(100% + 12px)",
                     WebkitOverflowScrolling: "touch",
                   }}
                 />
