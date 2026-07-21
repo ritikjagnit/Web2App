@@ -68,7 +68,7 @@ const initDb = async () => {
                 ssl: {
                     rejectUnauthorized: false
                 },
-                connectionTimeoutMillis: 5000 // 5 seconds timeout
+                connectionTimeoutMillis: 30000 // 30 seconds timeout to allow Neon database to wake up
             });
 
             const client = await pool.connect();
