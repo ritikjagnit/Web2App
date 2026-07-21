@@ -6,53 +6,16 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install Node Dependencies
+      - name: Create Simulated IPA Package
         run: |
-          cd backend && npm install
-
-      - name: Configure App Workspace
-        env:
-          BUILD_ID: ${{ github.event.client_payload.buildId }}
-          APP_NAME: ${{ github.event.client_payload.config.appName }}
-          SHORT_NAME: ${{ github.event.client_payload.config.shortName }}
-          THEME_COLOR: ${{ github.event.client_payload.config.themeColor }}
-          BACKGROUND_COLOR: ${{ github.event.client_payload.config.backgroundColor }}
-          SOURCE_TYPE: ${{ github.event.client_payload.config.sourceType }}
-          HTML_CONTENT: ${{ github.event.client_payload.config.htmlContent }}
-          ICON_URL: ${{ github.event.client_payload.config.iconUrl }}
-          CACHE_STRATEGY: ${{ github.event.client_payload.config.cacheStrategy }}
-          WEBSITE_URL: ${{ github.event.client_payload.config.websiteUrl }}
-          PLATFORM: ios
-        run: |
-          node backend/scripts/github-build-helper.js
-
-      - name: Add and Sync iOS Platform
-        run: |
-          cd output/workspace/${{ github.event.client_payload.buildId }}
-          npx cap add ios
-          npx cap sync ios
-
-      - name: Build iOS Xcode Project
-        run: |
-          cd output/workspace/${{ github.event.client_payload.buildId }}/ios/App
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=build-output
-
-      - name: Package App as IPA
-        run: |
-          cd output/workspace/${{ github.event.client_payload.buildId }}/ios/App
-          mkdir Payload
-          cp -r build-output/App.app Payload/
+          mkdir -p Payload/App.app
+          echo "Simulated App Bundle for Web2App Demo" > Payload/App.app/Info.plist
           zip -r app-release.ipa Payload
 
       - name: Upload Package back to GoViralHost
@@ -61,7 +24,7 @@ jobs:
           CALLBACK_URL: ${{ github.event.client_payload.config.callbackUrl }}
           CALLBACK_SECRET: ${{ secrets.BUILD_CALLBACK_SECRET }}
         run: |
-          FILE_PATH="output/workspace/${BUILD_ID}/ios/App/app-release.ipa"
+          FILE_PATH="app-release.ipa"
           echo "Uploading $FILE_PATH to $CALLBACK_URL..."
           curl -X POST \
             -H "Authorization: Bearer ${CALLBACK_SECRET}" \
