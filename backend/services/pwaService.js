@@ -1205,6 +1205,7 @@ exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, th
         shortName = `${shortName} (via Stufflas)`;
     }
 
+    const normalizedPlatform = targetPlatform || 'both';
     buildsStore[buildId] = {
         id: buildId,
         status: 'running',
@@ -1212,7 +1213,11 @@ exports.generatePwaPackage = async ({ userId, websiteUrl, appName, shortName, th
         step: 'Initializing',
         logs: [],
         error: null,
-        packagePath: null
+        packagePath: null,
+        targetPlatform: normalizedPlatform,
+        androidStatus: (normalizedPlatform === 'android' || normalizedPlatform === 'both') ? 'pending' : 'none',
+        iosStatus: (normalizedPlatform === 'ios' || normalizedPlatform === 'both') ? 'pending' : 'none',
+        androidBuildFormat: androidBuildFormat || 'apk'
     };
 
     // Run packaging asynchronously
