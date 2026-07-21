@@ -3,6 +3,9 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "concurrently \"vite dev\" \"node --watch-path=backend backend/server.js\"",
     "backend": "node backend/server.js",
