@@ -310,42 +310,19 @@ router.post('/upload-build/:buildId', upload.single('file'), async (req, res) =>
             }
 
             // If we are building both and the other one is not ready yet, keep the build status as 'running'
-            const bothPlatforms = (targetPlatform === 'both');
-            const otherPending = bothPlatforms && ((isAndroid && !isIosReady) || (isIpa && !isAndroidReady));
-
-            if (otherPending) {
-                const pendingMsg = isAndroid ? 'Android build compiled. Waiting for iOS compilation...' : 'iOS build compiled. Waiting for Android compilation...';
-                pwaService.updateBuildStatus(buildId, {
-                    progress: 85,
-                    step: pendingMsg,
-                    status: 'running'
-                });
-                pwaService.logBuildMsg(buildId, `✓ ${isAndroid ? 'Android' : 'iOS'} build uploaded successfully. Waiting for other platform to complete...`);
-                
-                // Update database status to running (just in case)
-                await pool.query(
-                    `UPDATE app_builds SET status = 'running' WHERE id = $1`,
-                    [buildId]
-                );
-
-                console.log(`[BUILD PARTIAL] Build ${buildId}: ${isAndroid ? 'Android' : 'iOS'} is ready, other is pending.`);
-                return res.json({ success: true, message: `Platform build uploaded successfully. ${pendingMsg}` });
-            }
-
-            // Both requested platforms are ready! Update database to success
+            // Mark database and in-memory state as success so user can download immediately
             await pool.query(
                 `UPDATE app_builds SET status = 'success', apk_url = $1 WHERE id = $2`,
                 [downloadUrl, buildId]
             );
 
-            // Update in-memory state in pwaService
             pwaService.updateBuildStatus(buildId, {
                 progress: 100,
                 step: 'Completed',
                 status: 'success',
                 packagePath: finalPath
             });
-            pwaService.logBuildMsg(buildId, `✓ All requested packages compiled and uploaded successfully from GitHub Actions!`);
+            pwaService.logBuildMsg(buildId, `✓ Package compiled and uploaded successfully from GitHub Actions!`);
 
             console.log(`[SUCCESS] Build ${buildId} finished via GitHub Actions.`);
             return res.json({ success: true, message: 'Build uploaded and state updated successfully' });
