@@ -860,8 +860,9 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
         buildsStore[buildId].step = 'Configuring Assets';
 
         // Set up the package name
-        const cleanName = appName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'app';
-        const packageName = `com.appweaver.${cleanName}_${buildId.split('_').pop()}`;
+        const cleanName = appName.replace(/[^a-zA-Z]/g, '').toLowerCase() || 'app';
+        const cleanBuildId = buildId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const packageName = `com.appweaver.${cleanName}${cleanBuildId}`;
         logMsg(buildId, `App Package ID generated: ${packageName}`);
 
         // Normalize websiteUrl to ensure it has a protocol

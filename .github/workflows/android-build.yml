@@ -62,16 +62,23 @@ jobs:
           APK_FILE="${BUILD_DIR}/android/app/build/outputs/apk/debug/app-debug.apk"
           AAB_FILE="${BUILD_DIR}/android/app/build/outputs/bundle/debug/app-debug.aab"
           
-          echo "Uploading APK: $APK_FILE to $CALLBACK_URL..."
-          curl -X POST \
-            -H "Authorization: Bearer ${CALLBACK_SECRET}" \
-            -F "file=@${APK_FILE}" \
-            -F "status=success" \
-            "${CALLBACK_URL}"
-            
-          echo "Uploading AAB: $AAB_FILE to $CALLBACK_URL..."
-          curl -X POST \
-            -H "Authorization: Bearer ${CALLBACK_SECRET}" \
-            -F "file=@${AAB_FILE}" \
-            -F "status=success" \
-            "${CALLBACK_URL}"
+          if [ -f "$APK_FILE" ]; then
+            echo "Uploading APK: $APK_FILE to $CALLBACK_URL..."
+            curl -X POST \
+              -H "Authorization: Bearer ${CALLBACK_SECRET}" \
+              -F "file=@${APK_FILE}" \
+              -F "status=success" \
+              "${CALLBACK_URL}"
+          else
+            echo "ERROR: APK file not found at $APK_FILE"
+            exit 1
+          fi
+          
+          if [ -f "$AAB_FILE" ]; then
+            echo "Uploading AAB: $AAB_FILE to $CALLBACK_URL..."
+            curl -X POST \
+              -H "Authorization: Bearer ${CALLBACK_SECRET}" \
+              -F "file=@${AAB_FILE}" \
+              -F "status=success" \
+              "${CALLBACK_URL}"
+          fi

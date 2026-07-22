@@ -87,8 +87,9 @@ async function run() {
         }
 
         // Configure Package Details
-        const cleanName = appName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'app';
-        const packageName = `com.appweaver.${cleanName}_${buildId.split('_').pop()}`;
+        const cleanName = appName.replace(/[^a-zA-Z]/g, '').toLowerCase() || 'app';
+        const cleanBuildId = buildId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const packageName = `com.appweaver.${cleanName}${cleanBuildId}`;
         console.log(`App Package ID generated: ${packageName}`);
 
         let normalizedUrl = websiteUrl;
