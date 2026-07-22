@@ -1,11 +1,13 @@
 package com.appweaver.template;
 
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.webkit.WebView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.ImageView;
+import android.widget.FrameLayout;
 import android.view.Gravity;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -14,6 +16,8 @@ import org.json.JSONObject;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private static final String TAG = "MainActivity";
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -23,20 +27,67 @@ public class MainActivity extends BridgeActivity {
             webView.post(new Runnable() {
                 @Override
                 public void run() {
-                    setupBottomNavigation(webView);
+                    setupLayoutAndAds(webView);
                 }
             });
         }
     }
     
-    private void setupBottomNavigation(final WebView webView) {
+    private void setupLayoutAndAds(final WebView webView) {
+        // 1. Read monetization config from resources
+        int resIdAdsEnabled = getResources().getIdentifier("admob_enabled", "string", getPackageName());
+        boolean adsEnabled = false;
+        if (resIdAdsEnabled != 0) {
+            adsEnabled = Boolean.parseBoolean(getString(resIdAdsEnabled));
+        }
+
+        String providerName = "";
+        String appId = "";
+        String bannerId = "";
+        String interstitialId = "";
+        String rewardedId = "";
+        String nativeId = "";
+        String appOpenId = "";
+
+        if (adsEnabled) {
+            int providerResId = getResources().getIdentifier("admob_provider", "string", getPackageName());
+            int appIdResId = getResources().getIdentifier("admob_app_id", "string", getPackageName());
+            int bannerResId = getResources().getIdentifier("admob_banner_id", "string", getPackageName());
+            int interstitialResId = getResources().getIdentifier("admob_interstitial_id", "string", getPackageName());
+            int rewardedResId = getResources().getIdentifier("admob_rewarded_id", "string", getPackageName());
+            int nativeResId = getResources().getIdentifier("admob_native_id", "string", getPackageName());
+            int appOpenResId = getResources().getIdentifier("admob_app_open_id", "string", getPackageName());
+
+            providerName = providerResId != 0 ? getString(providerResId) : "admob";
+            appId = appIdResId != 0 ? getString(appIdResId) : "";
+            bannerId = bannerResId != 0 ? getString(bannerResId) : "";
+            interstitialId = interstitialResId != 0 ? getString(interstitialResId) : "";
+            rewardedId = rewardedResId != 0 ? getString(rewardedResId) : "";
+            nativeId = nativeResId != 0 ? getString(nativeResId) : "";
+            appOpenId = appOpenResId != 0 ? getString(appOpenResId) : "";
+
+            Log.d(TAG, "Monetization enabled. Provider: " + providerName + ", App ID: " + appId);
+            
+            // Initialize AdManager
+            try {
+                AdManager.getInstance().setup(this, providerName, appId);
+                if (appOpenId != null && !appOpenId.trim().isEmpty()) {
+                    AdManager.getInstance().showAppOpenAd(this, appOpenId);
+                }
+            } catch (Throwable t) {
+                Log.e(TAG, "AdManager setup error: " + t.getMessage());
+            }
+        }
+
+        // 2. Read Bottom Nav config
         int resIdShow = getResources().getIdentifier("show_bottom_nav", "string", getPackageName());
         boolean showBottomNav = false;
         if (resIdShow != 0) {
             showBottomNav = Boolean.parseBoolean(getString(resIdShow));
         }
         
-        if (!showBottomNav) {
+        // If neither ads nor bottom nav is enabled, leave the webview alone
+        if (!showBottomNav && (!adsEnabled || bannerId.isEmpty())) {
             return;
         }
         
@@ -49,6 +100,7 @@ public class MainActivity extends BridgeActivity {
         
         int index = parent.indexOfChild(webView);
         
+        // Create the container layout wrapper
         LinearLayout mainContainer = new LinearLayout(this);
         mainContainer.setId(998877);
         mainContainer.setOrientation(LinearLayout.VERTICAL);
@@ -66,7 +118,50 @@ public class MainActivity extends BridgeActivity {
         );
         webView.setLayoutParams(webViewParams);
         mainContainer.addView(webView);
+
+        // Inject Banner Ad if enabled
+        if (adsEnabled && !bannerId.trim().isEmpty()) {
+            try {
+                FrameLayout adContainer = new FrameLayout(this);
+                adContainer.setId(887766);
+                LinearLayout.LayoutParams adParams = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+                adContainer.setLayoutParams(adParams);
+                mainContainer.addView(adContainer);
+                
+                AdManager.getInstance().loadBanner(this, bannerId, adContainer);
+                Log.d(TAG, "Loaded banner into container layout");
+            } catch (Throwable t) {
+                Log.e(TAG, "Error injecting Banner Ad: " + t.getMessage());
+            }
+        }
         
+        // Inject Bottom Navigation if enabled
+        if (showBottomNav) {
+            setupBottomNavigation(mainContainer);
+        }
+        
+        parent.addView(mainContainer, index);
+
+        // Periodically trigger Interstitial Ads on user navigation or after delay as a future ready option
+        if (adsEnabled && !interstitialId.isEmpty()) {
+            final String finalInterstitialId = interstitialId;
+            webView.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        AdManager.getInstance().showInterstitial(MainActivity.this, finalInterstitialId);
+                    } catch (Throwable t) {
+                        Log.e(TAG, "Error showing interstitial: " + t.getMessage());
+                    }
+                }
+            }, 10000); // Show interstitial after 10 seconds of app load
+        }
+    }
+    
+    private void setupBottomNavigation(LinearLayout mainContainer) {
         LinearLayout bottomNav = new LinearLayout(this);
         bottomNav.setOrientation(LinearLayout.HORIZONTAL);
         bottomNav.setGravity(Gravity.CENTER_VERTICAL);
@@ -83,6 +178,8 @@ public class MainActivity extends BridgeActivity {
         if (resIdJson != 0) {
             customNavJson = getString(resIdJson);
         }
+        
+        final WebView webView = getBridge().getWebView();
         
         if (customNavJson != null && !customNavJson.trim().isEmpty() && !customNavJson.equals("none")) {
             try {
@@ -250,6 +347,5 @@ public class MainActivity extends BridgeActivity {
         }
         
         mainContainer.addView(bottomNav);
-        parent.addView(mainContainer, index);
     }
 }

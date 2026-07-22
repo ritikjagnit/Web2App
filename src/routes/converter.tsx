@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Upload, Sparkles, Loader2, Download, Check, AlertCircle, 
   Globe, FileCode, Eye, Code2, Settings, ShieldCheck, 
-  Info, Smartphone, ArrowRight, Laptop, PlusCircle 
+  Info, Smartphone, ArrowRight, Laptop, PlusCircle, Crown
 } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
@@ -124,6 +124,14 @@ function ConverterPage() {
     { label: "Profile", url: "/profile", icon: "profile" }
   ]);
   const [androidBuildFormat, setAndroidBuildFormat] = useState<"apk" | "aab">("apk");
+  const [monetizationProvider, setMonetizationProvider] = useState<"none" | "admob" | "apporbit">("none");
+  const [admobAppId, setAdmobAppId] = useState("");
+  const [admobBannerId, setAdmobBannerId] = useState("");
+  const [admobInterstitialId, setAdmobInterstitialId] = useState("");
+  const [admobRewardedId, setAdmobRewardedId] = useState("");
+  const [admobNativeId, setAdmobNativeId] = useState("");
+  const [admobAppOpenId, setAdmobAppOpenId] = useState("");
+  const [monetizationErrors, setMonetizationErrors] = useState<Record<string, string>>({});
   const [previewDevice, setPreviewDevice] = useState<"android" | "ios">("android");
   const [targetPlatform, setTargetPlatform] = useState<"android" | "ios" | "both">("both");
 
@@ -169,6 +177,43 @@ function ConverterPage() {
     const blob = new Blob([newContent], { type: "text/html" });
     if (htmlPreviewUrl) URL.revokeObjectURL(htmlPreviewUrl);
     setHtmlPreviewUrl(URL.createObjectURL(blob));
+  };
+
+  const validateMonetizationFields = (provider = monetizationProvider, appId = admobAppId, banner = admobBannerId, interstitial = admobInterstitialId, rewarded = admobRewardedId, native = admobNativeId, appOpen = admobAppOpenId) => {
+    const errors: Record<string, string> = {};
+    if (provider === "admob") {
+      if (!appId) {
+        errors.appId = "App ID is required";
+      } else if (!/^ca-app-pub-\d{16}~\d{10}$/.test(appId.trim())) {
+        errors.appId = "Invalid format (ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX)";
+      }
+
+      if (!banner) {
+        errors.bannerId = "Banner Ad Unit ID is required";
+      } else if (!/^ca-app-pub-\d{16}\/\d{10}$/.test(banner.trim())) {
+        errors.bannerId = "Invalid format (ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX)";
+      }
+
+      if (!interstitial) {
+        errors.interstitialId = "Interstitial Ad Unit ID is required";
+      } else if (!/^ca-app-pub-\d{16}\/\d{10}$/.test(interstitial.trim())) {
+        errors.interstitialId = "Invalid format (ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX)";
+      }
+
+      if (rewarded && !/^ca-app-pub-\d{16}\/\d{10}$/.test(rewarded.trim())) {
+        errors.rewardedId = "Invalid format (ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX)";
+      }
+
+      if (native && !/^ca-app-pub-\d{16}\/\d{10}$/.test(native.trim())) {
+        errors.nativeId = "Invalid format (ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX)";
+      }
+
+      if (appOpen && !/^ca-app-pub-\d{16}\/\d{10}$/.test(appOpen.trim())) {
+        errors.appOpenId = "Invalid format (ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX)";
+      }
+    }
+    setMonetizationErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const generateAIIcon = async () => {
@@ -271,6 +316,10 @@ function ConverterPage() {
   };
 
   const startBuild = async () => {
+    if (!validateMonetizationFields()) {
+      toast.error("Please resolve AdMob configuration errors before starting the build.");
+      return;
+    }
     if (sourceType === "url") {
       const u = urlSchema.safeParse(websiteUrl);
       if (!u.success) { toast.error(u.error.issues[0].message); return; }
@@ -430,12 +479,36 @@ function ConverterPage() {
         .single();
       if (buildErr) throw buildErr;
 
-      // Call our backend build pipeline
+      // Define backendUrl
       let backendUrl = (import.meta.env.VITE_BACKEND_URL as string);
       if (!backendUrl || backendUrl === "/" || backendUrl.includes("5173")) {
         backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : 'https://web2app-689l.onrender.com';
       }
-      
+
+      // Save monetization configuration to backend database
+      try {
+        const monetizationBody = {
+          user_id: userId,
+          project_id: app.id,
+          provider: monetizationProvider,
+          app_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544~3347511713' : admobAppId,
+          banner_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/6300978111' : admobBannerId,
+          interstitial_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/1033173712' : admobInterstitialId,
+          rewarded_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/5224354917' : admobRewardedId,
+          native_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/2247696110' : admobNativeId,
+          app_open_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/3419835294' : admobAppOpenId,
+          ads_enabled: monetizationProvider !== 'none'
+        };
+
+        await fetch(`${backendUrl}/api/monetization/save`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(monetizationBody)
+        });
+      } catch (monErr) {
+        console.error("Failed to save monetization configurations:", monErr);
+      }
+
       let buildRes;
       try {
         buildRes = await fetch(`${backendUrl}/api/pwa/build`, {
@@ -464,7 +537,17 @@ function ConverterPage() {
                 url: tab.url,
                 icon: tab.customIconPreview || tab.icon
               }))
-            : []
+            : [],
+          monetization: {
+            provider: monetizationProvider,
+            app_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544~3347511713' : admobAppId,
+            banner_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/6300978111' : admobBannerId,
+            interstitial_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/1033173712' : admobInterstitialId,
+            rewarded_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/5224354917' : admobRewardedId,
+            native_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/2247696110' : admobNativeId,
+            app_open_id: monetizationProvider === 'apporbit' ? 'ca-app-pub-3940256099942544/3419835294' : admobAppOpenId,
+            ads_enabled: monetizationProvider !== 'none'
+          }
         })
       });
 
@@ -969,6 +1052,191 @@ function ConverterPage() {
                           </div>
                         )}
                       </motion.div>
+                    )}
+                  </div>
+
+                  {/* Monetization Settings Card */}
+                  <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 space-y-4 relative overflow-hidden group">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-bold flex items-center gap-1.5 text-primary">
+                          <Crown className="h-4 w-4" /> Monetization Settings
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Monetize your generated Android app using Google AdMob or AppOrbit Default Ads.
+                        </p>
+                      </div>
+                      <div className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                        {monetizationProvider === 'none' ? 'Ads Disabled' : monetizationProvider === 'apporbit' ? 'Using AppOrbit Ads' : 'Using Personal AdMob'}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 bg-muted/50 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMonetizationProvider("none");
+                          setMonetizationErrors({});
+                        }}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                          monetizationProvider === "none"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        No Ads
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMonetizationProvider("apporbit");
+                          setMonetizationErrors({});
+                        }}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                          monetizationProvider === "apporbit"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        AppOrbit Ads
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMonetizationProvider("admob");
+                          setMonetizationErrors({});
+                        }}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                          monetizationProvider === "admob"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        My AdMob
+                      </button>
+                    </div>
+
+                    {monetizationProvider === "admob" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-3 pt-3 border-t border-primary/10"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <Label htmlFor="admob-app-id" className="text-xs font-bold">Google AdMob App ID</Label>
+                            <span className="text-[9px] text-muted-foreground">Format: ca-app-pub-X~X</span>
+                          </div>
+                          <Input
+                            id="admob-app-id"
+                            value={admobAppId}
+                            onChange={(e) => {
+                              setAdmobAppId(e.target.value);
+                              validateMonetizationFields("admob", e.target.value, admobBannerId, admobInterstitialId, admobRewardedId, admobNativeId, admobAppOpenId);
+                            }}
+                            placeholder="ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX"
+                            className={`h-9 text-xs bg-background border-input ${monetizationErrors.appId ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                          />
+                          {monetizationErrors.appId && <p className="text-[10px] text-destructive font-semibold">{monetizationErrors.appId}</p>}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <Label htmlFor="admob-banner-id" className="text-xs font-bold">Banner Ad Unit ID</Label>
+                            <span className="text-[9px] text-muted-foreground">Format: ca-app-pub-X/X</span>
+                          </div>
+                          <Input
+                            id="admob-banner-id"
+                            value={admobBannerId}
+                            onChange={(e) => {
+                              setAdmobBannerId(e.target.value);
+                              validateMonetizationFields("admob", admobAppId, e.target.value, admobInterstitialId, admobRewardedId, admobNativeId, admobAppOpenId);
+                            }}
+                            placeholder="ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
+                            className={`h-9 text-xs bg-background border-input ${monetizationErrors.bannerId ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                          />
+                          {monetizationErrors.bannerId && <p className="text-[10px] text-destructive font-semibold">{monetizationErrors.bannerId}</p>}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <Label htmlFor="admob-interstitial-id" className="text-xs font-bold">Interstitial Ad Unit ID</Label>
+                            <span className="text-[9px] text-muted-foreground">Format: ca-app-pub-X/X</span>
+                          </div>
+                          <Input
+                            id="admob-interstitial-id"
+                            value={admobInterstitialId}
+                            onChange={(e) => {
+                              setAdmobInterstitialId(e.target.value);
+                              validateMonetizationFields("admob", admobAppId, admobBannerId, e.target.value, admobRewardedId, admobNativeId, admobAppOpenId);
+                            }}
+                            placeholder="ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
+                            className={`h-9 text-xs bg-background border-input ${monetizationErrors.interstitialId ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                          />
+                          {monetizationErrors.interstitialId && <p className="text-[10px] text-destructive font-semibold">{monetizationErrors.interstitialId}</p>}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <Label htmlFor="admob-rewarded-id" className="text-xs font-bold">Rewarded Ad Unit ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                          </div>
+                          <Input
+                            id="admob-rewarded-id"
+                            value={admobRewardedId}
+                            onChange={(e) => {
+                              setAdmobRewardedId(e.target.value);
+                              validateMonetizationFields("admob", admobAppId, admobBannerId, admobInterstitialId, e.target.value, admobNativeId, admobAppOpenId);
+                            }}
+                            placeholder="ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
+                            className={`h-9 text-xs bg-background border-input ${monetizationErrors.rewardedId ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                          />
+                          {monetizationErrors.rewardedId && <p className="text-[10px] text-destructive font-semibold">{monetizationErrors.rewardedId}</p>}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <Label htmlFor="admob-native-id" className="text-xs font-bold">Native Ad Unit ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                          </div>
+                          <Input
+                            id="admob-native-id"
+                            value={admobNativeId}
+                            onChange={(e) => {
+                              setAdmobNativeId(e.target.value);
+                              validateMonetizationFields("admob", admobAppId, admobBannerId, admobInterstitialId, admobRewardedId, e.target.value, admobAppOpenId);
+                            }}
+                            placeholder="ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
+                            className={`h-9 text-xs bg-background border-input ${monetizationErrors.nativeId ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                          />
+                          {monetizationErrors.nativeId && <p className="text-[10px] text-destructive font-semibold">{monetizationErrors.nativeId}</p>}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <Label htmlFor="admob-appopen-id" className="text-xs font-bold">App Open Ad Unit ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                          </div>
+                          <Input
+                            id="admob-appopen-id"
+                            value={admobAppOpenId}
+                            onChange={(e) => {
+                              setAdmobAppOpenId(e.target.value);
+                              validateMonetizationFields("admob", admobAppId, admobBannerId, admobInterstitialId, admobRewardedId, admobNativeId, e.target.value);
+                            }}
+                            placeholder="ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
+                            className={`h-9 text-xs bg-background border-input ${monetizationErrors.appOpenId ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                          />
+                          {monetizationErrors.appOpenId && <p className="text-[10px] text-destructive font-semibold">{monetizationErrors.appOpenId}</p>}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {monetizationProvider === "apporbit" && (
+                      <div className="bg-muted/30 rounded-xl p-3 text-xs text-muted-foreground space-y-1 border border-border">
+                        <p className="font-semibold text-foreground">AppOrbit Default Ads Enabled:</p>
+                        <p className="text-[10px] leading-normal">
+                          We will inject AppOrbit's default/test Google AdMob IDs during the build. Your app will render test ads in development and AppOrbit configuration blocks in production.
+                        </p>
+                      </div>
                     )}
                   </div>
 

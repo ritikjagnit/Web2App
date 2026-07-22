@@ -102,7 +102,8 @@ router.post('/build', async (req, res) => {
         android_build_format,
         target_platform,
         include_bottom_nav,
-        custom_navigation
+        custom_navigation,
+        monetization
     } = req.body;
     
     if (sourceType !== 'html' && !website_url) {
@@ -152,7 +153,8 @@ router.post('/build', async (req, res) => {
             targetPlatform: target_platform || 'both',
             androidBuildFormat: android_build_format || 'apk',
             includeBottomNav: include_bottom_nav === true,
-            customNavigation: custom_navigation
+            customNavigation: custom_navigation,
+            monetization: monetization
         });
 
         res.json({ 

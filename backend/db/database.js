@@ -33,6 +33,24 @@ const initSqlite = () => {
                     `);
 
                     sqliteDb.run(`
+                        CREATE TABLE IF NOT EXISTS monetization (
+                            id TEXT PRIMARY KEY,
+                            user_id TEXT,
+                            project_id TEXT UNIQUE,
+                            provider TEXT DEFAULT 'none',
+                            app_id TEXT,
+                            banner_id TEXT,
+                            interstitial_id TEXT,
+                            rewarded_id TEXT,
+                            native_id TEXT,
+                            app_open_id TEXT,
+                            ads_enabled BOOLEAN DEFAULT 0,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `);
+
+                    sqliteDb.run(`
                         CREATE TABLE IF NOT EXISTS app_builds (
                             id TEXT PRIMARY KEY,
                             user_id TEXT,
@@ -80,6 +98,24 @@ const initDb = async () => {
                     banner_id TEXT,
                     interstitial_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS monetization (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    project_id TEXT UNIQUE,
+                    provider TEXT DEFAULT 'none',
+                    app_id TEXT,
+                    banner_id TEXT,
+                    interstitial_id TEXT,
+                    rewarded_id TEXT,
+                    native_id TEXT,
+                    app_open_id TEXT,
+                    ads_enabled BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
             

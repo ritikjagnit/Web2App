@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const admobRoutes = require('./routes/admob');
+const monetizationRoutes = require('./routes/monetization');
 const pwaRoutes = require('./routes/pwa');
 const profilesRoutes = require('./routes/profiles');
 const teamRoutes = require('./routes/team');
@@ -22,6 +23,7 @@ app.use('/builds', express.static(path.join(__dirname, '../builds')));
 
 // Routes
 app.use('/api/admob', admobRoutes);
+app.use('/api/monetization', monetizationRoutes);
 app.use('/api/pwa', pwaRoutes);
 app.use('/api/app', pwaRoutes); // Compatibility fallback
 app.use('/api/profiles', profilesRoutes);
