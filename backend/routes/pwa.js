@@ -283,34 +283,35 @@ router.post('/upload-build/:buildId', upload.single('file'), async (req, res) =>
                               req.file.filename.endsWith('.apk') || req.file.filename.endsWith('.aab');
 
             const build = pwaService.getBuildStatus(buildId);
-            let isAndroidReady = false;
-            let isIosReady = false;
-            let targetPlatform = 'both';
+            let targetPlatform = 'android';
 
             if (build) {
-                targetPlatform = build.targetPlatform || 'both';
+                targetPlatform = build.targetPlatform || 'android';
                 if (isAndroid) build.androidStatus = 'success';
                 if (isIpa) build.iosStatus = 'success';
-                
-                isAndroidReady = (build.androidStatus === 'success' || build.androidStatus === 'none');
-                isIosReady = (build.iosStatus === 'success' || build.iosStatus === 'none');
-            } else {
-                // Fallback if in-memory cache was lost: check files present in the builds directory
-                const hasIpa = fs.existsSync(path.resolve(__dirname, `../../builds/${buildId}/app-release.ipa`));
-                const hasApk = fs.existsSync(path.resolve(__dirname, `../../builds/${buildId}/app-release.apk`)) ||
-                               fs.existsSync(path.resolve(__dirname, `../../builds/${buildId}/app-release.aab`));
-                
-                if (isAndroid) {
-                    isAndroidReady = true;
-                    isIosReady = hasIpa;
-                } else if (isIpa) {
-                    isIosReady = true;
-                    isAndroidReady = hasApk;
-                }
             }
 
-            // If we are building both and the other one is not ready yet, keep the build status as 'running'
-            // Mark database and in-memory state as success so user can download immediately
+            const isAndroidTargeted = (targetPlatform === 'android' || targetPlatform === 'both');
+
+            // If Android build is targeted, we MUST wait for Android APK/AAB to finish uploading!
+            if (isAndroidTargeted && !isAndroid && (!build || build.androidStatus !== 'success')) {
+                pwaService.updateBuildStatus(buildId, {
+                    progress: 75,
+                    step: 'iOS package ready. Compiling Android APK on GitHub Actions...',
+                    status: 'running'
+                });
+                pwaService.logBuildMsg(buildId, `✓ iOS package ready. Waiting for Android APK Gradle compilation to finish...`);
+                
+                await pool.query(
+                    `UPDATE app_builds SET status = 'running' WHERE id = $1`,
+                    [buildId]
+                );
+
+                console.log(`[BUILD PARTIAL] Build ${buildId}: iOS uploaded, waiting for Android APK.`);
+                return res.json({ success: true, message: 'iOS uploaded. Waiting for Android APK compilation...' });
+            }
+
+            // Android (or requested target) is ready! Mark status as success so user can download immediately
             await pool.query(
                 `UPDATE app_builds SET status = 'success', apk_url = $1 WHERE id = $2`,
                 [downloadUrl, buildId]
