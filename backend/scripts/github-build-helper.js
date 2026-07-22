@@ -16,6 +16,7 @@ let iconUrl = process.env.ICON_URL || '';
 let websiteUrl = process.env.WEBSITE_URL || '';
 let includeBottomNav = false;
 let customNavigation = [];
+let monetizationConfig = {};
 
 const eventPath = process.env.GITHUB_EVENT_PATH;
 if (eventPath && fs.existsSync(eventPath)) {
@@ -34,6 +35,7 @@ if (eventPath && fs.existsSync(eventPath)) {
         websiteUrl = config.websiteUrl || websiteUrl;
         includeBottomNav = config.includeBottomNav === true || config.includeBottomNav === 'true';
         customNavigation = config.customNavigation || [];
+        monetizationConfig = config.monetization || {};
     } catch (err) {
         console.error("Failed to parse GitHub event JSON:", err);
     }
@@ -179,7 +181,7 @@ async function run() {
             : 'none';
 
         // Monetization parameters from client payload
-        let monetization = (payload && payload.config && payload.config.monetization) || {};
+        let monetization = monetizationConfig || {};
         let adsEnabled = false;
         let provider = 'none';
         let appId = '';
