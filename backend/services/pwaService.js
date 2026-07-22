@@ -771,7 +771,8 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
                             websiteUrl,
                             callbackUrl,
                             includeBottomNav,
-                            customNavigation
+                            customNavigation,
+                            monetization
                         }
                     })
                 );
@@ -796,7 +797,8 @@ async function runPwaPackagePipeline(buildId, { userId, websiteUrl, appName, sho
                             websiteUrl,
                             callbackUrl,
                             includeBottomNav,
-                            customNavigation
+                            customNavigation,
+                            monetization
                         }
                     })
                 );

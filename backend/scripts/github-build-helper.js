@@ -177,6 +177,28 @@ async function run() {
                 .replace(/"/g, '\\"')
             : 'none';
 
+        // Monetization parameters from client payload
+        let monetization = (payload && payload.config && payload.config.monetization) || {};
+        let adsEnabled = false;
+        let provider = 'none';
+        let appId = '';
+        let bannerId = '';
+        let interstitialId = '';
+        let rewardedId = '';
+        let nativeId = '';
+        let appOpenId = '';
+
+        if (monetization && monetization.provider !== 'none') {
+            adsEnabled = true;
+            provider = monetization.provider;
+            appId = monetization.app_id || '';
+            bannerId = monetization.banner_id || '';
+            interstitialId = monetization.interstitial_id || '';
+            rewardedId = monetization.rewarded_id || '';
+            nativeId = monetization.native_id || '';
+            appOpenId = monetization.app_open_id || '';
+        }
+
         // Update strings.xml
         const stringsXmlPath = path.join(workspaceDir, 'android/app/src/main/res/values/strings.xml');
         let stringsXml = fs.readFileSync(stringsXmlPath, 'utf8');
@@ -186,30 +208,63 @@ async function run() {
         stringsXml = stringsXml.replace(/<string name="custom_url_scheme">[^<]+<\/string>/g, `<string name="custom_url_scheme">${packageName}</string>`);
         stringsXml = stringsXml.replace(/<string name="show_bottom_nav">[^<]+<\/string>/g, `<string name="show_bottom_nav">${includeBottomNav ? 'true' : 'false'}</string>`);
         stringsXml = stringsXml.replace(/<string name="custom_navigation_json">[^<]+<\/string>/g, `<string name="custom_navigation_json">${navJsonString}</string>`);
+        
+        stringsXml = stringsXml.replace('</resources>', `
+    <string name="admob_enabled">${adsEnabled}</string>
+    <string name="admob_provider">${provider}</string>
+    <string name="admob_app_id">${appId}</string>
+    <string name="admob_banner_id">${bannerId}</string>
+    <string name="admob_interstitial_id">${interstitialId}</string>
+    <string name="admob_rewarded_id">${rewardedId}</string>
+    <string name="admob_native_id">${nativeId}</string>
+    <string name="admob_app_open_id">${appOpenId}</string>
+</resources>`);
         fs.writeFileSync(stringsXmlPath, stringsXml, 'utf8');
+
+        // Update AndroidManifest.xml (Inject Application ID if ads enabled)
+        if (adsEnabled && appId) {
+            const manifestPath = path.join(workspaceDir, 'android/app/src/main/AndroidManifest.xml');
+            let manifest = fs.readFileSync(manifestPath, 'utf8');
+            manifest = manifest.replace('android:theme="@style/AppTheme">', `android:theme="@style/AppTheme">
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${appId}"/>`);
+            fs.writeFileSync(manifestPath, manifest, 'utf8');
+        }
 
         // Update build.gradle
         const buildGradlePath = path.join(workspaceDir, 'android/app/build.gradle');
         let buildGradle = fs.readFileSync(buildGradlePath, 'utf8');
         buildGradle = buildGradle.replace(/namespace\s+['"][^'"]+['"]/g, `namespace "${packageName}"`);
         buildGradle = buildGradle.replace(/applicationId\s+['"][^'"]+['"]/g, `applicationId "${packageName}"`);
+        if (adsEnabled) {
+            buildGradle = buildGradle.replace('dependencies {', `dependencies {
+    implementation 'com.google.android.gms:play-services-ads:22.6.0'`);
+        }
         fs.writeFileSync(buildGradlePath, buildGradle, 'utf8');
 
-        // Move MainActivity.java
-        const oldJavaFile = path.join(workspaceDir, 'android/app/src/main/java/com/appweaver/template/MainActivity.java');
-        if (fs.existsSync(oldJavaFile)) {
+        // Move and namespace ALL Java files from com/appweaver/template
+        const templateJavaDir = path.join(workspaceDir, 'android/app/src/main/java/com/appweaver/template');
+        if (fs.existsSync(templateJavaDir)) {
             const javaPackageDir = path.join(workspaceDir, 'android/app/src/main/java', packageName.replace(/\./g, '/'));
             fs.mkdirSync(javaPackageDir, { recursive: true });
             
-            const newJavaFile = path.join(javaPackageDir, 'MainActivity.java');
-            let mainActivityContent = fs.readFileSync(oldJavaFile, 'utf8');
-            mainActivityContent = mainActivityContent.replace(/package\s+com\.appweaver\.template;/g, `package ${packageName};`);
-            fs.writeFileSync(newJavaFile, mainActivityContent, 'utf8');
+            const files = fs.readdirSync(templateJavaDir);
+            for (const file of files) {
+                if (file.endsWith('.java')) {
+                    const srcPath = path.join(templateJavaDir, file);
+                    const destPath = path.join(javaPackageDir, file);
+                    let content = fs.readFileSync(srcPath, 'utf8');
+                    content = content.replace(/package\s+com\.appweaver\.template;/g, `package ${packageName};`);
+                    content = content.replace(/import\s+com\.appweaver\.template\./g, `import ${packageName}.`);
+                    fs.writeFileSync(destPath, content, 'utf8');
+                }
+            }
             
             if (packageName !== 'com.appweaver.template') {
-                fs.rmSync(path.join(workspaceDir, 'android/app/src/main/java/com/appweaver/template'), { recursive: true, force: true });
+                fs.rmSync(templateJavaDir, { recursive: true, force: true });
             }
-            console.log(`Relocated MainActivity.java to package directory matching: ${packageName}`);
+            console.log(`Relocated and namespaced all Java template files to: ${packageName}`);
         }
 
         // Generate mipmap launcher icons
